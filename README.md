@@ -44,6 +44,8 @@ Spider Monkey Panel packages by WilB:
 | Library Tree | 2.4.0 | [GitHub](https://github.com/Wil-B/Library-Tree/releases) |
 | Biography | 1.4.2 | [GitHub](https://github.com/Wil-B/Biography/releases) |
 
+JSplitter 4.3 or later is needed to switch to the miniplayer from a maximized window.
+
 The Lucide icon font is included here as `fonts/lucide.ttf`.
 
 ## Install
@@ -96,13 +98,34 @@ To go back to your previous look, import the configuration you exported in step 
   with the art on the left and title, artist, album, seek line and controls on the right. It has no
   frame and stays on top of other windows; drag it by the art or text. The same button, lit, brings
   back the full window where it was, with your previous always-on-top setting. The strip remembers
-  where you leave it, and foobar2000 reopens in whichever mode it closed in. Un-maximize the window
-  before switching: Windows keeps a maximized window maximized when it is resized, so the strip would
-  sit in the corner and may not drag.
+  where you leave it, and foobar2000 reopens in whichever mode it closed in. From a maximized window
+  it un-maximizes first and maximizes again on the way back (JSplitter 4.3+; with older versions,
+  un-maximize the window yourself before switching).
 - Playlist drawer: click the playlist name to switch, create, rename or delete playlists. Click,
   Ctrl/Shift-click and arrow keys select; click an album heading to select the album; double-click or
   Enter plays; Delete removes; Ctrl+A selects all; drag to reorder; drop files or library items in.
   Right-click for the usual playlist context menu.
+
+## Icons (optional)
+
+`icons/` has Lucide's boom-box glyph for foobar2000's tray and taskbar, in Plinth's bone colour:
+
+- **Tray:** `boombox-tray.ico`. Preferences › Display › Columns UI, *System tray* settings › tick
+  **Use custom icon** › **Select icon…**.
+- **Taskbar:** `boombox-taskbar.ico`, or `boombox-tile.ico` (the glyph on a grey tile) if your taskbar
+  is light. With foobar2000 pinned to the taskbar, right-click its button › right-click *foobar2000* ›
+  **Properties** › **Change Icon…**. Restart Explorer (Task Manager › Windows Explorer › Restart) to
+  see it. Unpinning and re-pinning brings back the default icon. The title bar and Alt+Tab keep the
+  default icon, which is built into `foobar2000.exe`.
+
+## Known issues
+
+- **Crash on exit** (crash report shows `js::RunJobs` in `mozjs-102`): a Spider Monkey Panel bug
+  ([dima-lur/spider-monkey-panel-x64#3](https://github.com/dima-lur/spider-monkey-panel-x64/issues/3))
+  set off by the Biography panel's AllMusic downloads. Your settings are saved first, so nothing is
+  lost, but you get a crash dialog and a "terminated abnormally" prompt at the next start. Until it's
+  fixed, turn AllMusic off: right-click the About drawer › **Options…** and untick the AllMusic
+  biography and review auto-downloads.
 
 ## Customise
 
@@ -129,6 +152,7 @@ Then import `Plinth.fcl` again.
   and moves and shows its child panels (`Library`, `Playlist`, `Lyrics`, `About`) as drawers.
 - `scripts/playlist.js`: the playlist drawer (Spider Monkey Panel).
 - `scripts/lib/common.js`: palette, fonts, Lucide codepoints, drawing helpers.
+- `tools/make_icons.py`: renders `icons/*.ico` from `fonts/lucide.ttf` (needs Pillow).
 - `tools/build_plinth.py` and `tools/fcl.py`: write `Plinth.fcl` directly: the layout, the child panels
   with their scripts or packages and Library Tree / Biography settings, colours, and misc layout.
   `docs/fcl-format.md` documents the file format, including JSplitter's undocumented child table.

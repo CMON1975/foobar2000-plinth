@@ -473,17 +473,40 @@ function setMini(on) {
 	window.Repaint();
 }
 
+function enterMini() {
+	const win = fb.Window;
+	window.SetProperty('Plinth.FullRect', [win.X, win.Y, win.Width, win.Height].join(','));
+	window.SetProperty('Plinth.FullOnTop', fb.AlwaysOnTop);
+	const pos = readNumbers('Plinth.MiniPos'); // where the miniplayer was last left
+	const [x, y] = pos.length === 2 ? pos : [win.X, win.Y];
+	setMini(true);
+	win.FrameStyle = FRAME.NoBorder;
+	fitMiniWindow(x, y);
+	fb.AlwaysOnTop = true;
+}
+
+let restoreWait = null; // interval while a maximized window is being restored on the way to mini
+
 function toggleMini() {
 	const win = fb.Window;
+	if (restoreWait) return;
 	if (!state.mini) {
-		window.SetProperty('Plinth.FullRect', [win.X, win.Y, win.Width, win.Height].join(','));
-		window.SetProperty('Plinth.FullOnTop', fb.AlwaysOnTop);
-		const pos = readNumbers('Plinth.MiniPos'); // where the miniplayer was last left
-		const [x, y] = pos.length === 2 ? pos : [win.X, win.Y];
-		setMini(true);
-		win.FrameStyle = FRAME.NoBorder;
-		fitMiniWindow(x, y);
-		fb.AlwaysOnTop = true;
+		// A maximized window stays maximized when resized: stuck in the corner and undraggable. JSplitter
+		// 4.3+ can restore it first; Restore() is posted, so wait for it (about 30 ms) before shrinking.
+		const maximized = typeof win.Restore === 'function' && win.IsMaximized;
+		window.SetProperty('Plinth.FullMaximized', maximized);
+		if (!maximized) {
+			enterMini();
+			return;
+		}
+		win.Restore();
+		const start = Date.now();
+		restoreWait = window.SetInterval(() => {
+			if (win.IsMaximized && Date.now() - start < 1000) return;
+			window.ClearInterval(restoreWait);
+			restoreWait = null;
+			enterMini(); // FullRect is now the restored rect, so maximizing again keeps it as the normal size
+		}, 15);
 	} else {
 		window.SetProperty('Plinth.MiniPos', [win.X, win.Y].join(','));
 		const full = readNumbers('Plinth.FullRect');
@@ -492,6 +515,7 @@ function toggleMini() {
 		win.FrameStyle = FRAME.Default;
 		if (full.length === 4 && full[2] > 0 && full[3] > 0) win.Move(full[0], full[1], full[2], full[3]);
 		else win.Move(win.X, win.Y, px(1280), px(860));
+		if (window.GetProperty('Plinth.FullMaximized', false) && typeof win.Maximize === 'function') win.Maximize();
 		fb.AlwaysOnTop = window.GetProperty('Plinth.FullOnTop', false);
 	}
 }
