@@ -1,7 +1,8 @@
 'use strict';
 // Plinth — root JSplitter script.
 // Draws the centre "plinth" (album art, track info, seek bar, transport) and the top chrome,
-// and shows the child panels (Library, Playlist, Lyrics, About) as drawers.
+// and shows the child panels (Library, Playlist, Lyrics, About) as drawers. The miniplayer
+// toggle turns the main window into a small frameless strip pinned on top.
 // tools/build_plinth.py inlines lib/common.js in place of the include below; in --dev builds the
 // panel's stub script defines PLINTH_DIR and includes this file from the checkout.
 
@@ -17,9 +18,20 @@ const DRAWERS = {
 };
 const RIGHT_VIEWS = ['playlist', 'lyrics', 'about'];
 
+// Miniplayer window (design board "Mini · 120", grown to space its rows): art fills the left square,
+// and title, artist, album, seek line and controls stack on the right, 18px in from either side.
+const MINI = { w: 459, h: 139, padX: 18 };
+
+// Type and glyph sizes per mode. title lists the sizes tried, largest first, until the title fits.
+const SIZES = {
+	full: { title: [36, 31, 27], empty: 30, artist: 20, album: 16, time: 14, align: DT.CENTER, side: 19, skip: 22, play: 30, knob: 10, noArt: 40 },
+	mini: { title: [15], empty: 15, artist: 12, album: 11, time: 11, align: DT.LEFT, side: 14, skip: 15, play: 18, knob: 8, noArt: 32 },
+};
+
 const state = {
 	view: window.GetProperty('Plinth.View', ''),
 	library: window.GetProperty('Plinth.Library', false),
+	mini: window.GetProperty('Plinth.Mini', false),
 	w: 0,
 	h: 0,
 	hover: null,
@@ -57,6 +69,7 @@ function refreshInfo() {
 		info.title = info.artist = info.album = '';
 	}
 	loadArt(handle);
+	if (state.mini) layout(); // the time slots are sized from the track length
 	window.Repaint();
 }
 
@@ -95,6 +108,20 @@ function scaledArt(fit) {
 	return art.scaled;
 }
 
+// The art scaled to fill box, centre-cropped to its aspect (CSS object-fit: cover).
+function coverArt(box) {
+	const tag = `cover:${box.w}x${box.h}`;
+	if (art.scaledFor !== tag) {
+		const iw = art.img.Width, ih = art.img.Height;
+		const k = Math.min(iw / box.w, ih / box.h);
+		const sw = Math.round(box.w * k), sh = Math.round(box.h * k);
+		const crop = art.img.Clone(Math.floor((iw - sw) / 2), Math.floor((ih - sh) / 2), sw, sh);
+		art.scaled = crop.Resize(box.w, box.h, 7);
+		art.scaledFor = tag;
+	}
+	return art.scaled;
+}
+
 function artShadow(w, h) {
 	const tag = `${w}x${h}`;
 	if (art.shadowFor !== tag) {
@@ -117,6 +144,10 @@ function drawerWidth(name) {
 }
 
 function layout() {
+	if (state.mini) {
+		layoutMini();
+		return;
+	}
 	const { w, h } = state;
 	const chromeH = px(80);
 	const libW = state.library ? drawerWidth('library') : 0;
@@ -143,6 +174,7 @@ function layout() {
 	L.seekBar = r(colX, seekY, colW, px(2));
 	L.seek = r(colX, seekY - px(9), colW, px(20));
 	L.times = r(colX, seekY + px(10), colW, px(20));
+	L.timeL = L.timeR = L.times;
 	L.seekArea = r(colX - px(8), seekY - px(10), colW + px(16), px(42));
 
 	const cy = L.times.y + px(20) + px(10);
@@ -155,6 +187,7 @@ function layout() {
 	L.next = b(cx + btn + gap + big + gap, btn);
 	L.shuffle = b(colX - px(12), btn);
 	L.repeat = b(colX - px(12) + btn, btn);
+	L.mini = b(colX - px(12) + btn * 2, btn);
 	L.volBar = r(colX + colW - px(72), cy + px(28) - px(8), px(72), px(16));
 	L.volIcon = b(L.volBar.x - px(4) - btn, btn);
 
@@ -171,6 +204,60 @@ function layout() {
 	};
 }
 
+const measureImg = gdi.CreateImage(1, 1);
+function textWidth(str, f) {
+	const g = measureImg.GetGraphics();
+	const tw = g.CalcTextWidth(str, f);
+	measureImg.ReleaseGraphics(g);
+	return Math.ceil(tw);
+}
+
+function layoutMini() {
+	const { w, h } = state;
+	const S = SIZES.mini;
+	const r = (x, y, ww, hh) => ({ x, y, w: ww, h: hh });
+	const colX = h + px(MINI.padX), colW = Math.max(0, w - colX - px(MINI.padX));
+
+	// rows: title 18, 2, artist 15, 2, album 14 | gap 15 | seek 12 | gap 9 | controls 30.
+	// The controls' glyphs sit 8px inside their row, so the ink of the three groups is evenly spaced
+	// (~19px apart) once the stack sits 1px below centre.
+	const rowH = px(12), ctlH = px(30), lineGap = px(2), gapSeek = px(15), gapCtl = px(9);
+	const stackH = px(18) + lineGap + px(15) + lineGap + px(14) + gapSeek + rowH + gapCtl + ctlH;
+	L = { colX, colW, tabs: [] };
+	L.art = r(0, 0, h, h);
+	L.info = r(0, 0, w, h);
+	L.title = r(colX, Math.round((h - stackH) / 2) + px(1), colW, px(18));
+	L.artist = r(colX, L.title.y + px(18) + lineGap, colW, px(15));
+	L.album = r(colX, L.artist.y + px(15) + lineGap, colW, px(14));
+
+	// Times flank the seek line. Their slots fit the track length, so the line stays put as they tick.
+	const seekY = L.album.y + px(14) + gapSeek;
+	const zeros = Plinth.formatTime(fb.IsPlaying ? fb.PlaybackLength : 0).replace(/\d/g, '0');
+	const f = font('regular', S.time);
+	const slotL = textWidth(zeros, f), slotR = textWidth(`\u2212${zeros}`, f);
+	L.timeL = r(colX, seekY, slotL, rowH);
+	L.timeR = r(colX + colW - slotR, seekY, slotR, rowH);
+	const barX = colX + slotL + px(10);
+	L.seekBar = r(barX, seekY + Math.round(rowH / 2) - px(1), Math.max(0, L.timeR.x - px(10) - barX), px(2));
+	L.seek = r(barX - px(4), seekY - px(3), L.seekBar.w + px(8), rowH + px(6));
+	L.seekArea = r(colX - px(2), seekY - px(6), colW + px(4), rowH + px(12));
+
+	// controls: shuffle, repeat, miniplayer | prev, play, next | volume
+	const cy = seekY + rowH + gapCtl;
+	const b = (x, size) => r(x, cy + Math.round((ctlH - size) / 2), size, size);
+	const btn = px(28), big = px(30), gap = px(2);
+	const nudge = Math.round((btn - px(S.side)) / 2); // first glyph lines up with the text edge
+	L.shuffle = b(colX - nudge, btn);
+	L.repeat = b(colX - nudge + btn, btn);
+	L.mini = b(colX - nudge + btn * 2, btn);
+	const cx = colX + Math.round((colW - (btn * 2 + big + gap * 2)) / 2);
+	L.prev = b(cx, btn);
+	L.play = b(cx + btn + gap, big);
+	L.next = b(cx + btn + gap + big + gap, btn);
+	L.volBar = r(colX + colW - px(44), cy + Math.round(ctlH / 2) - px(8), px(44), px(16));
+	L.volIcon = b(L.volBar.x - px(5) - px(S.side) - nudge, btn);
+}
+
 // ---- child panels ------------------------------------------------------------------------
 const panelCache = {};
 function panel(name) {
@@ -184,7 +271,7 @@ function applyPanels() {
 	for (const name of Object.keys(DRAWERS)) {
 		const p = panel(name);
 		if (!p) continue;
-		const show = name === 'library' ? state.library : state.view === name;
+		const show = !state.mini && (name === 'library' ? state.library : state.view === name);
 		if (show) {
 			const rc = name === 'library' ? L.drawers.library : L.drawers.right;
 			p.Move(rc.x, rc.y, rc.w, rc.h);
@@ -215,6 +302,8 @@ const posToVol = (p) => (p <= 0.01 ? -100 : 50 * Math.log10(p));
 const isShuffle = () => [3, 4, 5, 6].includes(plman.PlaybackOrder);
 
 // ---- painting ----------------------------------------------------------------------------
+const sizes = () => (state.mini ? SIZES.mini : SIZES.full);
+
 function brighter(colour) {
 	return colour === C.t3 ? C.t2 : colour === C.t2 ? C.t1 : colour;
 }
@@ -242,7 +331,12 @@ function paintArt(gr) {
 	const fit = artFit(box);
 	if (!fit) {
 		gr.FillSolidRect(box.x, box.y, box.w, box.h, C.g3);
-		drawGlyph(gr, 'music', 40, C.t3, box.x, box.y, box.w, box.h);
+		drawGlyph(gr, 'music', sizes().noArt, C.t3, box.x, box.y, box.w, box.h);
+		return;
+	}
+	if (state.mini) { // flush to the window edges, no shadow
+		const img = coverArt(box);
+		gr.DrawImage(img, box.x, box.y, box.w, box.h, 0, 0, img.Width, img.Height);
 		return;
 	}
 	const sh = artShadow(fit.w, fit.h);
@@ -252,21 +346,23 @@ function paintArt(gr) {
 }
 
 function paintInfo(gr) {
+	const S = sizes();
 	if (!info.handle) {
-		text(gr, 'Nothing playing', font('light', 30), C.t3, L.title.x, L.title.y, L.title.w, L.title.h, DT.CENTER);
+		text(gr, 'Nothing playing', font('light', S.empty), C.t3, L.title.x, L.title.y, L.title.w, L.title.h, S.align);
 		return;
 	}
-	let titleFont = font('light', 36);
-	for (const size of [36, 31, 27]) {
+	let titleFont;
+	for (const size of S.title) {
 		titleFont = font('light', size);
 		if (gr.CalcTextWidth(info.title, titleFont) <= L.title.w) break;
 	}
-	text(gr, info.title, titleFont, C.t1, L.title.x, L.title.y, L.title.w, L.title.h, DT.CENTER);
-	text(gr, info.artist, font('regular', 20), C.t2, L.artist.x, L.artist.y, L.artist.w, L.artist.h, DT.CENTER);
-	text(gr, info.album, font('regular', 16), C.t3, L.album.x, L.album.y, L.album.w, L.album.h, DT.CENTER);
+	text(gr, info.title, titleFont, C.t1, L.title.x, L.title.y, L.title.w, L.title.h, S.align);
+	text(gr, info.artist, font('regular', S.artist), C.t2, L.artist.x, L.artist.y, L.artist.w, L.artist.h, S.align);
+	text(gr, info.album, font('regular', S.album), C.t3, L.album.x, L.album.y, L.album.w, L.album.h, S.align);
 }
 
 function paintSeek(gr) {
+	const S = sizes();
 	const bar = L.seekBar;
 	const len = fb.PlaybackLength;
 	const t = state.seek !== null ? state.seek * len : fb.PlaybackTime;
@@ -274,29 +370,31 @@ function paintSeek(gr) {
 	gr.FillSolidRect(bar.x, bar.y, bar.w, bar.h, C.g5);
 	if (fb.IsPlaying) gr.FillSolidRect(bar.x, bar.y, Math.round(bar.w * frac), bar.h, C.t2);
 	if (fb.IsPlaying && len > 0 && (state.hover === 'seek' || state.seek !== null)) {
-		const k = px(10);
+		const k = px(S.knob);
 		gr.SetSmoothingMode(4);
 		gr.FillEllipse(bar.x + Math.round(bar.w * frac) - k / 2, bar.y + bar.h / 2 - k / 2, k, k, C.t1);
 		gr.SetSmoothingMode(0);
 	}
-	const f = font('regular', 14);
+	const f = font('regular', S.time);
 	if (fb.IsPlaying) {
-		text(gr, Plinth.formatTime(t), f, C.t3, L.times.x, L.times.y, L.times.w, L.times.h, DT.LEFT);
-		if (len > 0) text(gr, `\u2212${Plinth.formatTime(len - t)}`, f, C.t3, L.times.x, L.times.y, L.times.w, L.times.h, DT.RIGHT);
+		text(gr, Plinth.formatTime(t), f, C.t3, L.timeL.x, L.timeL.y, L.timeL.w, L.timeL.h, DT.LEFT);
+		if (len > 0) text(gr, `\u2212${Plinth.formatTime(len - t)}`, f, C.t3, L.timeR.x, L.timeR.y, L.timeR.w, L.timeR.h, DT.RIGHT);
 	}
 }
 
 function paintControls(gr) {
+	const S = sizes();
 	const order = plman.PlaybackOrder;
-	button(gr, 'shuffle', 'shuffle', 19, isShuffle() ? C.t1 : C.t3);
-	button(gr, 'repeat', order === 2 ? 'repeatOne' : 'repeat', 19, order === 1 || order === 2 ? C.t1 : C.t3);
-	button(gr, 'prev', 'prev', 22, C.t2);
-	button(gr, 'play', fb.IsPlaying && !fb.IsPaused ? 'pause' : 'play', 30, C.t1);
-	button(gr, 'next', 'next', 22, C.t2);
+	button(gr, 'shuffle', 'shuffle', S.side, isShuffle() ? C.t1 : C.t3);
+	button(gr, 'repeat', order === 2 ? 'repeatOne' : 'repeat', S.side, order === 1 || order === 2 ? C.t1 : C.t3);
+	button(gr, 'mini', 'pip', S.side, state.mini ? C.t1 : C.t3);
+	button(gr, 'prev', 'prev', S.skip, C.t2);
+	button(gr, 'play', fb.IsPlaying && !fb.IsPaused ? 'pause' : 'play', S.play, C.t1);
+	button(gr, 'next', 'next', S.skip, C.t2);
 
 	const vol = fb.Volume;
 	const name = vol <= -100 ? 'volumeMute' : vol < -12 ? 'volume' : vol < -4 ? 'volumeLow' : 'volumeHigh';
-	button(gr, 'volIcon', name, 19, C.t3);
+	button(gr, 'volIcon', name, S.side, C.t3);
 	const vb = L.volBar, y = vb.y + Math.round(vb.h / 2) - 1;
 	const pos = volToPos(vol);
 	const active = state.hover === 'volBar' || state.hover === 'volIcon' || state.volDrag;
@@ -330,16 +428,155 @@ function paintChrome(gr) {
 
 function paint(gr) {
 	gr.FillSolidRect(0, 0, state.w, state.h, C.g1);
-	paintDrawerFrames(gr);
+	if (!state.mini) paintDrawerFrames(gr);
 	paintArt(gr);
 	paintInfo(gr);
 	paintSeek(gr);
 	paintControls(gr);
-	paintChrome(gr);
+	if (!state.mini) paintChrome(gr);
+}
+
+// ---- miniplayer window -------------------------------------------------------------------
+// JSplitter's fb.Window drops the main window's caption and locks it to the mini size;
+// fb.AlwaysOnTop pins it. The full window's rect and pin state are kept in panel properties.
+const FRAME = { Default: 0, NoCaption: 1, NoBorder: 2 }; // JSplitter's FrameStyle flags, documented but not predefined
+// Neither frame style can switch resizing off (dima-lur/jsplitter#4), and a locked size still shows resize
+// cursors: NoBorder puts JSplitter's own resize zones 8 px inside every edge, and NoCaption keeps Windows'
+// resizable frame (WS_THICKFRAME) around the strip. So the strip uses NoCaption and a hidden PowerShell
+// clears WS_THICKFRAME, leaving no frame and no resize zones. FrameStyle.Default later restores the style
+// JSplitter saved, frame included. Without PowerShell the frame just stays.
+const MINI_FRAME = FRAME.NoCaption;
+const readNumbers = (name) => String(window.GetProperty(name, '')).split(',').map(Number).filter(Number.isFinite);
+
+// Clears WS_THICKFRAME (0x40000) from the panel's root window (GA_ROOT = 2) while it has no caption
+// (WS_CAPTION = 0xC00000), and fits the window to its old client area so nothing inside moves
+// (SWP_NOZORDER|NOACTIVATE|FRAMECHANGED). Per-monitor DPI aware (-4) where Windows supports it.
+const dropFrameScript = (hwnd) => [
+	"$t=[AppDomain]::CurrentDomain.DefineDynamicAssembly([Reflection.AssemblyName]'P','Run').DefineDynamicModule('P').DefineType('U');",
+	"function D($n,$r,$a){$t.DefinePInvokeMethod($n,'user32.dll','Public,Static,PinvokeImpl','Standard',$r,$a,'Winapi','Unicode').SetImplementationFlags('PreserveSig')};",
+	'D SetThreadDpiAwarenessContext ([IntPtr]) @([IntPtr]);',
+	'D GetAncestor ([IntPtr]) @([IntPtr],[int]);',
+	'D GetWindowLongPtrW ([IntPtr]) @([IntPtr],[int]);',
+	'D SetWindowLongPtrW ([IntPtr]) @([IntPtr],[int],[IntPtr]);',
+	'D GetClientRect ([bool]) @([IntPtr],[int[]]);',
+	'D MapWindowPoints ([int]) @([IntPtr],[IntPtr],[int[]],[int]);',
+	'D SetWindowPos ([bool]) @([IntPtr],[IntPtr],[int],[int],[int],[int],[int]);',
+	'$u=$t.CreateType();try{[void]$u::SetThreadDpiAwarenessContext([IntPtr]-4)}catch{};',
+	`$h=$u::GetAncestor([IntPtr]${hwnd},2);$s=[int64]$u::GetWindowLongPtrW($h,-16);$c=[int[]]::new(4);`,
+	'if(($s -band 0xC00000) -eq 0 -and ($s -band 0x40000) -and $u::GetClientRect($h,$c)){[void]$u::MapWindowPoints($h,[IntPtr]::Zero,$c,2);',
+	'[void]$u::SetWindowLongPtrW($h,-16,[IntPtr]($s -bxor 0x40000));[void]$u::SetWindowPos($h,[IntPtr]::Zero,$c[0],$c[1],$c[2]-$c[0],$c[3]-$c[1],0x34)}',
+].join('');
+
+function lockWindowSize(w, h) { // no arguments unlocks
+	const win = fb.Window;
+	if (w) {
+		win.MinWidth = win.MaxWidth = w;
+		win.MinHeight = win.MaxHeight = h;
+	}
+	win.MinSize = !!w;
+	win.MaxSize = !!w;
+}
+
+// Size the window so this panel gets exactly MINI. The frame, and any menu bar, toolbars or status bar
+// Columns UI shows, sit outside the panel, and toolbars wrap at this width, so measure after a first move.
+function fitMiniWindow(x, y) {
+	const win = fb.Window;
+	lockWindowSize();
+	win.Move(x, y, px(MINI.w), px(MINI.h));
+	const w = px(MINI.w) + win.Width - window.Width, h = px(MINI.h) + win.Height - window.Height;
+	if (w !== win.Width || h !== win.Height) win.Move(x, y, w, h);
+	lockWindowSize(w, h);
+}
+
+let frameWait = null; // interval while the resize frame is being dropped
+
+// Runs dropFrameScript with the size unlocked so it can resize the window, then locks it again once the
+// window has changed width (utils.Run reports no completion; RunCmdAsync's processes can't reach the window).
+// The framed window first moves out by the frame, so the strip ends up where it was fitted.
+function dropResizeFrame() {
+	const win = fb.Window, width = win.Width, start = Date.now();
+	const f = Math.round((win.Width - window.Width) / 2); // the frame's thickness: the panel spans the window
+	if (f <= 0) return;
+	let started = false;
+	window.ClearInterval(frameWait);
+	lockWindowSize();
+	try {
+		started = utils.Run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', dropFrameScript(window.ID)], '', '', 0, false).OK; // 0: ShowWindow.Hide
+	} catch (e) { /* no PowerShell: the frame stays */ }
+	if (!started) {
+		lockWindowSize(win.Width, win.Height);
+		return;
+	}
+	win.Move(win.X - f, win.Y - f, win.Width, win.Height);
+	frameWait = window.SetInterval(() => {
+		const dropped = win.Width !== width;
+		if (state.mini && !dropped && Date.now() - start < 3000) return;
+		window.ClearInterval(frameWait);
+		frameWait = null;
+		if (state.mini) fitMiniWindow(dropped ? win.X : win.X + f, dropped ? win.Y : win.Y + f);
+	}, 50);
+}
+
+function setMini(on) {
+	state.mini = on;
+	window.SetProperty('Plinth.Mini', on);
+	state.hover = state.pressed = state.seek = null;
+	state.volDrag = false;
+	layout();
+	applyPanels();
+	window.Repaint();
+}
+
+function enterMini() {
+	const win = fb.Window;
+	window.SetProperty('Plinth.FullRect', [win.X, win.Y, win.Width, win.Height].join(','));
+	window.SetProperty('Plinth.FullOnTop', fb.AlwaysOnTop);
+	const pos = readNumbers('Plinth.MiniPos'); // where the miniplayer was last left
+	const [x, y] = pos.length === 2 ? pos : [win.X, win.Y];
+	setMini(true);
+	win.FrameStyle = MINI_FRAME;
+	fitMiniWindow(x, y);
+	dropResizeFrame();
+	fb.AlwaysOnTop = true;
+}
+
+let restoreWait = null; // interval while a maximized window is being restored on the way to mini
+
+function toggleMini() {
+	const win = fb.Window;
+	if (restoreWait) return;
+	if (!state.mini) {
+		// A maximized window stays maximized when resized: stuck in the corner and undraggable. JSplitter
+		// 4.3+ can restore it first; Restore() is posted, so wait for it (about 30 ms) before shrinking.
+		const maximized = typeof win.Restore === 'function' && win.IsMaximized;
+		window.SetProperty('Plinth.FullMaximized', maximized);
+		if (!maximized) {
+			enterMini();
+			return;
+		}
+		win.Restore();
+		const start = Date.now();
+		restoreWait = window.SetInterval(() => {
+			if (win.IsMaximized && Date.now() - start < 1000) return;
+			window.ClearInterval(restoreWait);
+			restoreWait = null;
+			enterMini(); // FullRect is now the restored rect, so maximizing again keeps it as the normal size
+		}, 15);
+	} else {
+		window.SetProperty('Plinth.MiniPos', [win.X, win.Y].join(','));
+		const full = readNumbers('Plinth.FullRect');
+		setMini(false);
+		lockWindowSize();
+		win.FrameStyle = FRAME.Default;
+		if (full.length === 4 && full[2] > 0 && full[3] > 0) win.Move(full[0], full[1], full[2], full[3]);
+		else win.Move(win.X, win.Y, px(1280), px(860));
+		if (window.GetProperty('Plinth.FullMaximized', false) && typeof win.Maximize === 'function') win.Maximize();
+		fb.AlwaysOnTop = window.GetProperty('Plinth.FullOnTop', false);
+	}
 }
 
 // ---- interaction -------------------------------------------------------------------------
-const CLICKABLE = ['menu', 'libToggle', 'libClose', 'viewClose', 'shuffle', 'repeat', 'prev', 'play', 'next', 'volIcon', 'volBar', 'seek'];
+const CLICKABLE = ['menu', 'libToggle', 'libClose', 'viewClose', 'shuffle', 'repeat', 'mini', 'prev', 'play', 'next', 'volIcon', 'volBar', 'seek'];
 
 function hitTest(x, y) {
 	for (const id of CLICKABLE) {
@@ -370,7 +607,8 @@ function activate(id, x, y) {
 	else if (id === 'repeat') {
 		const order = plman.PlaybackOrder;
 		plman.PlaybackOrder = order === 1 ? 2 : order === 2 ? 0 : 1;
-	} else if (id === 'prev') fb.Prev();
+	} else if (id === 'mini') toggleMini();
+	else if (id === 'prev') fb.Prev();
 	else if (id === 'play') fb.PlayOrPause();
 	else if (id === 'next') fb.Next();
 	else if (id === 'volIcon') fb.VolumeMute();
@@ -429,6 +667,10 @@ function on_mouse_move(x, y) {
 
 function on_mouse_lbtn_down(x, y) {
 	const id = hitTest(x, y);
+	if (state.mini && (id === null || id === 'info')) { // the captionless miniplayer drags by its art and text
+		fb.Window.MoveStart();
+		return;
+	}
 	state.pressed = id;
 	if (id === 'seek') {
 		state.seek = seekFraction(x);
@@ -547,9 +789,39 @@ function debugRun() {
 	layout();
 	applyPanels();
 	window.Repaint();
-	Plinth.log('plinth_report.txt', report);
+
+	// Miniplayer round trip, holding the other mode for a few seconds so the native window can be inspected.
+	const win = fb.Window;
+	const describe = () => report.push(`${state.mini ? 'mini' : 'full'}: window ${win.X},${win.Y} ${win.Width}x${win.Height} panel ${window.Width}x${window.Height} frame ${win.FrameStyle} onTop ${fb.AlwaysOnTop}`);
+	describe();
+	try {
+		toggleMini();
+	} catch (e) {
+		report.push(`toggle: ERROR ${e.message}`);
+		Plinth.log('plinth_report.txt', report);
+		return;
+	}
+	describe();
+	window.SetTimeout(() => {
+		describe(); // after the resize frame is dropped
+		if (state.mini) report.push(`mini layout: ${JSON.stringify({ title: L.title, album: L.album, seekBar: L.seekBar, timeL: L.timeL, timeR: L.timeR, mini: L.mini, play: L.play, volBar: L.volBar })}`);
+		debugSnapshot(state.mini ? 'mini' : 'full');
+		Plinth.log('plinth_report.txt', report);
+		window.SetTimeout(() => {
+			toggleMini();
+			describe();
+			Plinth.log('plinth_report.txt', report);
+		}, 8000);
+	}, 1000);
 }
 
 if (Plinth.debugDir) fb.Volume = -100; // test harness: never make sound
+if (state.mini) { // reloaded or restarted in mini mode: the window keeps its place, but not its frame or limits
+	fb.Window.FrameStyle = MINI_FRAME;
+	window.SetTimeout(() => {
+		fitMiniWindow(fb.Window.X, fb.Window.Y);
+		dropResizeFrame();
+	}, 0);
+}
 refreshInfo();
 if (Plinth.debugDir) window.SetTimeout(debugRun, 2500);

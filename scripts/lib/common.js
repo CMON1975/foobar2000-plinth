@@ -49,7 +49,7 @@ const Plinth = (() => {
 		shuffle: 0xe15e, repeat: 0xe146, repeatOne: 0xe1fd,
 		volume: 0xe1a9, volumeLow: 0xe1aa, volumeHigh: 0xe1ab, volumeMute: 0xe1ac,
 		playing: 0xe55a, chevronDown: 0xe06d, chevronRight: 0xe06f, close: 0xe1b2,
-		search: 0xe151, music: 0xe122, plus: 0xe13d,
+		search: 0xe151, music: 0xe122, plus: 0xe13d, pip: 0xe3af,
 	};
 	const glyph = (name) => String.fromCharCode(icon[name]);
 
