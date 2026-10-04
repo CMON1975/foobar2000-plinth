@@ -218,17 +218,17 @@ function layoutMini() {
 	const r = (x, y, ww, hh) => ({ x, y, w: ww, h: hh });
 	const colX = h + px(MINI.padX), colW = Math.max(0, w - colX - px(MINI.padX));
 
-	// rows: title 18, artist 15, album 14 | gap 13 | seek 12 | gap 7 | controls 30.
+	// rows: title 18, 2, artist 15, 2, album 14 | gap 15 | seek 12 | gap 9 | controls 30.
 	// The controls' glyphs sit 8px inside their row, so the ink of the three groups is evenly spaced
-	// (~17px apart and from the edges) once the stack sits 1px below centre.
-	const rowH = px(12), ctlH = px(30), gapSeek = px(13), gapCtl = px(7);
-	const stackH = px(18) + px(15) + px(14) + gapSeek + rowH + gapCtl + ctlH;
+	// (~19px apart) once the stack sits 1px below centre.
+	const rowH = px(12), ctlH = px(30), lineGap = px(2), gapSeek = px(15), gapCtl = px(9);
+	const stackH = px(18) + lineGap + px(15) + lineGap + px(14) + gapSeek + rowH + gapCtl + ctlH;
 	L = { colX, colW, tabs: [] };
 	L.art = r(0, 0, h, h);
 	L.info = r(0, 0, w, h);
 	L.title = r(colX, Math.round((h - stackH) / 2) + px(1), colW, px(18));
-	L.artist = r(colX, L.title.y + px(18), colW, px(15));
-	L.album = r(colX, L.artist.y + px(15), colW, px(14));
+	L.artist = r(colX, L.title.y + px(18) + lineGap, colW, px(15));
+	L.album = r(colX, L.artist.y + px(15) + lineGap, colW, px(14));
 
 	// Times flank the seek line. Their slots fit the track length, so the line stays put as they tick.
 	const seekY = L.album.y + px(14) + gapSeek;
