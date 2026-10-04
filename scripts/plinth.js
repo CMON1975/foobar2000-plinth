@@ -2,7 +2,7 @@
 // Plinth — root JSplitter script.
 // Draws the centre "plinth" (album art, track info, seek bar, transport) and the top chrome,
 // and shows the child panels (Library, Playlist, Lyrics, About) as drawers. The miniplayer
-// toggle turns the main window into a small borderless strip pinned on top.
+// toggle turns the main window into a small captionless strip pinned on top.
 // tools/build_plinth.py inlines lib/common.js in place of the include below; in --dev builds the
 // panel's stub script defines PLINTH_DIR and includes this file from the checkout.
 
@@ -437,9 +437,13 @@ function paint(gr) {
 }
 
 // ---- miniplayer window -------------------------------------------------------------------
-// JSplitter's fb.Window turns the main window borderless and locks it to the mini size;
+// JSplitter's fb.Window drops the main window's caption and locks it to the mini size;
 // fb.AlwaysOnTop pins it. The full window's rect and pin state are kept in panel properties.
-const FRAME = { Default: 0, NoBorder: 2 }; // JSplitter's FrameStyle flags, documented but not predefined
+const FRAME = { Default: 0, NoCaption: 1, NoBorder: 2 }; // JSplitter's FrameStyle flags, documented but not predefined
+// NoCaption keeps Windows' thin frame, so its resize zones (and cursors) sit just outside the strip.
+// NoBorder would drop the frame too, but JSplitter then puts resize zones 8 px inside every edge,
+// even with the size locked.
+const MINI_FRAME = FRAME.NoCaption;
 const readNumbers = (name) => String(window.GetProperty(name, '')).split(',').map(Number).filter(Number.isFinite);
 
 function lockWindowSize(w, h) { // no arguments unlocks
@@ -452,8 +456,8 @@ function lockWindowSize(w, h) { // no arguments unlocks
 	win.MaxSize = !!w;
 }
 
-// Size the borderless window so this panel gets exactly MINI. Any menu bar, toolbars or status bar
-// Columns UI shows sit outside the panel, and toolbars wrap at this width, so measure after a first move.
+// Size the window so this panel gets exactly MINI. The frame, and any menu bar, toolbars or status bar
+// Columns UI shows, sit outside the panel, and toolbars wrap at this width, so measure after a first move.
 function fitMiniWindow(x, y) {
 	const win = fb.Window;
 	lockWindowSize();
@@ -480,7 +484,7 @@ function enterMini() {
 	const pos = readNumbers('Plinth.MiniPos'); // where the miniplayer was last left
 	const [x, y] = pos.length === 2 ? pos : [win.X, win.Y];
 	setMini(true);
-	win.FrameStyle = FRAME.NoBorder;
+	win.FrameStyle = MINI_FRAME;
 	fitMiniWindow(x, y);
 	fb.AlwaysOnTop = true;
 }
@@ -612,7 +616,7 @@ function on_mouse_move(x, y) {
 
 function on_mouse_lbtn_down(x, y) {
 	const id = hitTest(x, y);
-	if (state.mini && (id === null || id === 'info')) { // the borderless miniplayer drags by its art and text
+	if (state.mini && (id === null || id === 'info')) { // the captionless miniplayer drags by its art and text
 		fb.Window.MoveStart();
 		return;
 	}
@@ -761,7 +765,7 @@ function debugRun() {
 
 if (Plinth.debugDir) fb.Volume = -100; // test harness: never make sound
 if (state.mini) { // reloaded or restarted in mini mode: the window keeps its place, but not its frame or limits
-	fb.Window.FrameStyle = FRAME.NoBorder;
+	fb.Window.FrameStyle = MINI_FRAME;
 	window.SetTimeout(() => fitMiniWindow(fb.Window.X, fb.Window.Y), 0);
 }
 refreshInfo();

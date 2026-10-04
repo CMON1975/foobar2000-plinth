@@ -96,7 +96,7 @@ To go back to your previous look, import the configuration you exported in step 
   info for the track's context menu. When stopped, it shows the focused playlist track.
 - **Miniplayer** (the picture-in-picture button after repeat): shrinks the window to a 459×139 strip
   with the art on the left and title, artist, album, seek line and controls on the right. It has no
-  frame and stays on top of other windows; drag it by the art or text. The same button, lit, brings
+  title bar and stays on top of other windows; drag it by the art or text. The same button, lit, brings
   back the full window where it was, with your previous always-on-top setting. The strip remembers
   where you leave it, and foobar2000 reopens in whichever mode it closed in. From a maximized window
   it un-maximizes first and maximizes again on the way back (JSplitter 4.3+; with older versions,
