@@ -18,9 +18,8 @@ const DRAWERS = {
 };
 const RIGHT_VIEWS = ['playlist', 'lyrics', 'about'];
 
-// Miniplayer window (design board "Mini · 120", margins half again): art fills the left square, and
-// title, artist, album, seek line and controls stack on the right, 27px in from either side with 19px
-// above and below.
+// Miniplayer window (design board "Mini · 120", grown to space its rows): art fills the left square,
+// and title, artist, album, seek line and controls stack on the right, 27px in from either side.
 const MINI = { w: 471, h: 133, padX: 27 };
 
 // Type and glyph sizes per mode. title lists the sizes tried, largest first, until the title fits.
@@ -219,18 +218,20 @@ function layoutMini() {
 	const r = (x, y, ww, hh) => ({ x, y, w: ww, h: hh });
 	const colX = h + px(MINI.padX), colW = Math.max(0, w - colX - px(MINI.padX));
 
-	// rows: title 18, artist 15, album 14, gap 6, seek 12, controls 30
-	const rowH = px(12), ctlH = px(30);
-	const stackH = px(18) + px(15) + px(14) + px(6) + rowH + ctlH;
+	// rows: title 18, artist 15, album 14 | gap 13 | seek 12 | gap 7 | controls 30.
+	// The controls' glyphs sit 8px inside their row, so the ink of the three groups is evenly spaced
+	// (~17px apart and from the edges) once the stack sits 1px below centre.
+	const rowH = px(12), ctlH = px(30), gapSeek = px(13), gapCtl = px(7);
+	const stackH = px(18) + px(15) + px(14) + gapSeek + rowH + gapCtl + ctlH;
 	L = { colX, colW, tabs: [] };
 	L.art = r(0, 0, h, h);
 	L.info = r(0, 0, w, h);
-	L.title = r(colX, Math.round((h - stackH) / 2), colW, px(18));
+	L.title = r(colX, Math.round((h - stackH) / 2) + px(1), colW, px(18));
 	L.artist = r(colX, L.title.y + px(18), colW, px(15));
 	L.album = r(colX, L.artist.y + px(15), colW, px(14));
 
 	// Times flank the seek line. Their slots fit the track length, so the line stays put as they tick.
-	const seekY = L.album.y + px(14) + px(6);
+	const seekY = L.album.y + px(14) + gapSeek;
 	const zeros = Plinth.formatTime(fb.IsPlaying ? fb.PlaybackLength : 0).replace(/\d/g, '0');
 	const f = font('regular', S.time);
 	const slotL = textWidth(zeros, f), slotR = textWidth(`\u2212${zeros}`, f);
@@ -242,7 +243,7 @@ function layoutMini() {
 	L.seekArea = r(colX - px(2), seekY - px(6), colW + px(4), rowH + px(12));
 
 	// controls: shuffle, repeat, miniplayer | prev, play, next | volume
-	const cy = seekY + rowH;
+	const cy = seekY + rowH + gapCtl;
 	const b = (x, size) => r(x, cy + Math.round((ctlH - size) / 2), size, size);
 	const btn = px(28), big = px(30), gap = px(2);
 	const nudge = Math.round((btn - px(S.side)) / 2); // first glyph lines up with the text edge
