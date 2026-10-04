@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+Thumbs.db
+desktop.ini
+*.fb2k-component
+*.zip
+# --dev / --debug-dir builds embed local paths; only the default build is committed
+*-dev.fcl
+*-debug.fcl
