@@ -92,7 +92,7 @@ To go back to your previous look, import the configuration you exported in step 
 - Centre: click or drag the seek line; drag the volume line or scroll over it; click the speaker to
   mute. Shuffle toggles shuffle (tracks); repeat cycles playlist → track → off. Right-click the track
   info for the track's context menu. When stopped, it shows the focused playlist track.
-- **Miniplayer** (the picture-in-picture button after repeat): shrinks the window to a 471×133 strip
+- **Miniplayer** (the picture-in-picture button after repeat): shrinks the window to a 459×139 strip
   with the art on the left and title, artist, album, seek line and controls on the right. It has no
   frame and stays on top of other windows; drag it by the art or text. The same button, lit, brings
   back the full window where it was, with your previous always-on-top setting. The strip remembers

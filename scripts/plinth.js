@@ -19,8 +19,8 @@ const DRAWERS = {
 const RIGHT_VIEWS = ['playlist', 'lyrics', 'about'];
 
 // Miniplayer window (design board "Mini · 120", grown to space its rows): art fills the left square,
-// and title, artist, album, seek line and controls stack on the right, 27px in from either side.
-const MINI = { w: 471, h: 133, padX: 27 };
+// and title, artist, album, seek line and controls stack on the right, 18px in from either side.
+const MINI = { w: 459, h: 139, padX: 18 };
 
 // Type and glyph sizes per mode. title lists the sizes tried, largest first, until the title fits.
 const SIZES = {
