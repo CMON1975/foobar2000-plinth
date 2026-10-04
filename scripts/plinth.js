@@ -2,7 +2,7 @@
 // Plinth — root JSplitter script.
 // Draws the centre "plinth" (album art, track info, seek bar, transport) and the top chrome,
 // and shows the child panels (Library, Playlist, Lyrics, About) as drawers. The miniplayer
-// toggle turns the main window into a small captionless strip pinned on top.
+// toggle turns the main window into a small frameless strip pinned on top.
 // tools/build_plinth.py inlines lib/common.js in place of the include below; in --dev builds the
 // panel's stub script defines PLINTH_DIR and includes this file from the checkout.
 
@@ -440,11 +440,32 @@ function paint(gr) {
 // JSplitter's fb.Window drops the main window's caption and locks it to the mini size;
 // fb.AlwaysOnTop pins it. The full window's rect and pin state are kept in panel properties.
 const FRAME = { Default: 0, NoCaption: 1, NoBorder: 2 }; // JSplitter's FrameStyle flags, documented but not predefined
-// NoCaption keeps Windows' thin frame, so its resize zones (and cursors) sit just outside the strip.
-// NoBorder would drop the frame too, but JSplitter then puts resize zones 8 px inside every edge,
-// even with the size locked.
+// Neither frame style can switch resizing off (dima-lur/jsplitter#4), and a locked size still shows resize
+// cursors: NoBorder puts JSplitter's own resize zones 8 px inside every edge, and NoCaption keeps Windows'
+// resizable frame (WS_THICKFRAME) around the strip. So the strip uses NoCaption and a hidden PowerShell
+// clears WS_THICKFRAME, leaving no frame and no resize zones. FrameStyle.Default later restores the style
+// JSplitter saved, frame included. Without PowerShell the frame just stays.
 const MINI_FRAME = FRAME.NoCaption;
 const readNumbers = (name) => String(window.GetProperty(name, '')).split(',').map(Number).filter(Number.isFinite);
+
+// Clears WS_THICKFRAME (0x40000) from the panel's root window (GA_ROOT = 2) while it has no caption
+// (WS_CAPTION = 0xC00000), and fits the window to its old client area so nothing inside moves
+// (SWP_NOZORDER|NOACTIVATE|FRAMECHANGED). Per-monitor DPI aware (-4) where Windows supports it.
+const dropFrameScript = (hwnd) => [
+	"$t=[AppDomain]::CurrentDomain.DefineDynamicAssembly([Reflection.AssemblyName]'P','Run').DefineDynamicModule('P').DefineType('U');",
+	"function D($n,$r,$a){$t.DefinePInvokeMethod($n,'user32.dll','Public,Static,PinvokeImpl','Standard',$r,$a,'Winapi','Unicode').SetImplementationFlags('PreserveSig')};",
+	'D SetThreadDpiAwarenessContext ([IntPtr]) @([IntPtr]);',
+	'D GetAncestor ([IntPtr]) @([IntPtr],[int]);',
+	'D GetWindowLongPtrW ([IntPtr]) @([IntPtr],[int]);',
+	'D SetWindowLongPtrW ([IntPtr]) @([IntPtr],[int],[IntPtr]);',
+	'D GetClientRect ([bool]) @([IntPtr],[int[]]);',
+	'D MapWindowPoints ([int]) @([IntPtr],[IntPtr],[int[]],[int]);',
+	'D SetWindowPos ([bool]) @([IntPtr],[IntPtr],[int],[int],[int],[int],[int]);',
+	'$u=$t.CreateType();try{[void]$u::SetThreadDpiAwarenessContext([IntPtr]-4)}catch{};',
+	`$h=$u::GetAncestor([IntPtr]${hwnd},2);$s=[int64]$u::GetWindowLongPtrW($h,-16);$c=[int[]]::new(4);`,
+	'if(($s -band 0xC00000) -eq 0 -and ($s -band 0x40000) -and $u::GetClientRect($h,$c)){[void]$u::MapWindowPoints($h,[IntPtr]::Zero,$c,2);',
+	'[void]$u::SetWindowLongPtrW($h,-16,[IntPtr]($s -bxor 0x40000));[void]$u::SetWindowPos($h,[IntPtr]::Zero,$c[0],$c[1],$c[2]-$c[0],$c[3]-$c[1],0x34)}',
+].join('');
 
 function lockWindowSize(w, h) { // no arguments unlocks
 	const win = fb.Window;
@@ -467,6 +488,35 @@ function fitMiniWindow(x, y) {
 	lockWindowSize(w, h);
 }
 
+let frameWait = null; // interval while the resize frame is being dropped
+
+// Runs dropFrameScript with the size unlocked so it can resize the window, then locks it again once the
+// window has changed width (utils.Run reports no completion; RunCmdAsync's processes can't reach the window).
+// The framed window first moves out by the frame, so the strip ends up where it was fitted.
+function dropResizeFrame() {
+	const win = fb.Window, width = win.Width, start = Date.now();
+	const f = Math.round((win.Width - window.Width) / 2); // the frame's thickness: the panel spans the window
+	if (f <= 0) return;
+	let started = false;
+	window.ClearInterval(frameWait);
+	lockWindowSize();
+	try {
+		started = utils.Run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', dropFrameScript(window.ID)], '', '', 0, false).OK; // 0: ShowWindow.Hide
+	} catch (e) { /* no PowerShell: the frame stays */ }
+	if (!started) {
+		lockWindowSize(win.Width, win.Height);
+		return;
+	}
+	win.Move(win.X - f, win.Y - f, win.Width, win.Height);
+	frameWait = window.SetInterval(() => {
+		const dropped = win.Width !== width;
+		if (state.mini && !dropped && Date.now() - start < 3000) return;
+		window.ClearInterval(frameWait);
+		frameWait = null;
+		if (state.mini) fitMiniWindow(dropped ? win.X : win.X + f, dropped ? win.Y : win.Y + f);
+	}, 50);
+}
+
 function setMini(on) {
 	state.mini = on;
 	window.SetProperty('Plinth.Mini', on);
@@ -486,6 +536,7 @@ function enterMini() {
 	setMini(true);
 	win.FrameStyle = MINI_FRAME;
 	fitMiniWindow(x, y);
+	dropResizeFrame();
 	fb.AlwaysOnTop = true;
 }
 
@@ -752,6 +803,7 @@ function debugRun() {
 	}
 	describe();
 	window.SetTimeout(() => {
+		describe(); // after the resize frame is dropped
 		if (state.mini) report.push(`mini layout: ${JSON.stringify({ title: L.title, album: L.album, seekBar: L.seekBar, timeL: L.timeL, timeR: L.timeR, mini: L.mini, play: L.play, volBar: L.volBar })}`);
 		debugSnapshot(state.mini ? 'mini' : 'full');
 		Plinth.log('plinth_report.txt', report);
@@ -766,7 +818,10 @@ function debugRun() {
 if (Plinth.debugDir) fb.Volume = -100; // test harness: never make sound
 if (state.mini) { // reloaded or restarted in mini mode: the window keeps its place, but not its frame or limits
 	fb.Window.FrameStyle = MINI_FRAME;
-	window.SetTimeout(() => fitMiniWindow(fb.Window.X, fb.Window.Y), 0);
+	window.SetTimeout(() => {
+		fitMiniWindow(fb.Window.X, fb.Window.Y);
+		dropResizeFrame();
+	}, 0);
 }
 refreshInfo();
 if (Plinth.debugDir) window.SetTimeout(debugRun, 2500);
