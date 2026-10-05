@@ -52,7 +52,7 @@ const TF = {
 };
 const info = { handle: null, title: '', artist: '', album: '', playing: false };
 
-function refreshInfo() {
+function refreshInfo(reloadArt) {
 	const playing = fb.IsPlaying;
 	const handle = playing ? fb.GetNowPlaying() : fb.GetFocusItem();
 	info.handle = handle;
@@ -68,7 +68,7 @@ function refreshInfo() {
 	} else {
 		info.title = info.artist = info.album = '';
 	}
-	loadArt(handle);
+	loadArt(handle, reloadArt);
 	if (state.mini) layout(); // the time slots are sized from the track length
 	window.Repaint();
 }
@@ -76,17 +76,23 @@ function refreshInfo() {
 // ---- album art ---------------------------------------------------------------------------
 const art = { key: null, img: null, scaled: null, scaledFor: '', shadow: null, shadowFor: '' };
 
-function loadArt(handle) {
+// Art is looked up once per album (folder + album). reload looks again for the same album, to pick
+// up art added while it's showing — embedded, or a cover file dropped in its folder; the image on
+// screen stays until the new one arrives.
+function loadArt(handle, reload) {
 	const key = handle ? TF.artKey.EvalWithMetadb(handle) : null;
-	if (key === art.key) return;
-	art.key = key;
-	art.img = art.scaled = null;
-	art.scaledFor = '';
+	if (key !== art.key) {
+		art.key = key;
+		art.img = art.scaled = null;
+		art.scaledFor = '';
+	} else if (!reload) return;
 	if (!handle) return;
 	utils.GetAlbumArtAsyncV2(window.ID, handle, 0)
 		.then((result) => {
 			if (art.key !== key) return;
 			art.img = result && result.image ? result.image : null;
+			art.scaled = null;
+			art.scaledFor = '';
 			window.Repaint();
 		})
 		.catch(() => {});
@@ -731,7 +737,7 @@ function on_paint(gr) {
 	if (state.w > 0 && state.h > 0) paint(gr);
 }
 
-function on_playback_new_track() { refreshInfo(); }
+function on_playback_new_track() { refreshInfo(true); }
 function on_playback_dynamic_info_track() { refreshInfo(); }
 function on_playback_stop(reason) { if (reason !== 2) refreshInfo(); }
 function on_playback_pause() { window.Repaint(); }
@@ -743,8 +749,8 @@ function on_playback_order_changed() { window.Repaint(); }
 function on_volume_change() { window.Repaint(); }
 function on_item_focus_change() { if (!fb.IsPlaying) refreshInfo(); }
 function on_playlist_switch() { if (!fb.IsPlaying) refreshInfo(); }
-function on_metadb_changed(handles) {
-	if (info.handle && handles.Find(info.handle) >= 0) refreshInfo();
+function on_metadb_changed(handles, fromHook) { // fromHook: play-count style fields, not the file's tags
+	if (info.handle && handles.Find(info.handle) >= 0) refreshInfo(!fromHook);
 }
 
 // ---- debug (isolated test harness only) --------------------------------------------------
