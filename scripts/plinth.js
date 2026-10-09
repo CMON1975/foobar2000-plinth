@@ -261,6 +261,20 @@ function textWidth(str, f) {
 	return Math.ceil(tw);
 }
 
+// str cut to fit maxW with a trailing "..." the way DT_END_ELLIPSIS cuts it, but returned, so whatever
+// follows the text can be placed by its real width.
+function ellipsize(gr, str, f, maxW) {
+	if (gr.CalcTextWidth(str, f) <= maxW) return str;
+	const chars = Array.from(str), cut = (n) => `${chars.slice(0, n).join('').trimEnd()}...`;
+	let lo = 0, hi = chars.length - 1; // the most characters that fit before the ellipsis
+	while (lo < hi) {
+		const mid = Math.ceil((lo + hi) / 2);
+		if (gr.CalcTextWidth(cut(mid), f) <= maxW) lo = mid;
+		else hi = mid - 1;
+	}
+	return cut(lo);
+}
+
 function layoutMini() {
 	const { w, h } = state;
 	const S = SIZES.mini;
@@ -401,19 +415,20 @@ function paintInfo(gr) {
 		text(gr, 'Nothing playing', font('light', S.empty), C.t3, L.title.x, L.title.y, L.title.w, L.title.h, S.align);
 		return;
 	}
-	// The favorites button follows the title's text, so the title gives up the button's width:
-	// on both sides when centred, keeping it centred above the artist and album.
-	const box = px(S.favBox), centred = S.align === DT.CENTER;
-	const tx = L.title.x + (centred ? box : 0), tw = Math.max(0, L.title.w - box * (centred ? 2 : 1));
-	let titleFont, titleW;
+	// The favorites button follows the title's text, so the title gives up the button's width. When
+	// centred, title and star are centred as a pair, measured to the star, not the padding after it.
+	const box = px(S.favBox), tw = Math.max(0, L.title.w - box);
+	let titleFont;
 	for (const size of S.title) {
 		titleFont = font('light', size);
-		titleW = gr.CalcTextWidth(info.title, titleFont);
-		if (titleW <= tw) break;
+		if (gr.CalcTextWidth(info.title, titleFont) <= tw) break;
 	}
-	titleW = Math.min(Math.ceil(titleW), tw);
-	text(gr, info.title, titleFont, C.t1, tx, L.title.y, tw, L.title.h, S.align);
-	L.fav = { x: tx + (centred ? Math.round((tw + titleW) / 2) : titleW), y: L.title.y, w: box, h: L.title.h };
+	const title = ellipsize(gr, info.title, titleFont, tw);
+	const titleW = Math.ceil(gr.CalcTextWidth(title, titleFont));
+	const after = Math.round((box - px(S.fav)) / 2);
+	const tx = S.align === DT.CENTER ? L.title.x + Math.round((L.title.w - titleW - box + after) / 2) : L.title.x;
+	text(gr, title, titleFont, C.t1, tx, L.title.y, titleW, L.title.h);
+	L.fav = { x: tx + titleW, y: L.title.y, w: box, h: L.title.h };
 	button(gr, 'fav', info.favorite ? 'starMinus' : 'starPlus', S.fav, info.favorite ? C.t1 : C.t3);
 	text(gr, info.artist, font('regular', S.artist), C.t2, L.artist.x, L.artist.y, L.artist.w, L.artist.h, S.align);
 	text(gr, info.album, font('regular', S.album), C.t3, L.album.x, L.album.y, L.album.w, L.album.h, S.align);
