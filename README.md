@@ -94,6 +94,10 @@ To go back to your previous look, import the configuration you exported in step 
 - Centre: click or drag the seek line; drag the volume line or scroll over it; click the speaker to
   mute. Shuffle toggles shuffle (tracks); repeat cycles playlist → track → off. Right-click the track
   info for the track's context menu. When stopped, it shows the focused playlist track.
+- **Favorites** (the star after the title, in the full window and the miniplayer): adds the track to
+  a playlist named *Favorites*, creating it the first time. Once the track is in it, the star lights
+  up and shows a minus; click it again to take the track out. Renaming the playlist detaches it, and
+  the next star click starts a new *Favorites*.
 - **Miniplayer** (the picture-in-picture button after repeat): shrinks the window to a 459×139 strip
   with the art on the left and title, artist, album, seek line and controls on the right. It has no
   title bar or border and stays on top of other windows; drag it by the art or text. (A hidden Windows
@@ -143,6 +147,7 @@ Then import `Plinth.fcl` again.
 - Palette and fonts: `scripts/lib/common.js`. `SHADE` picks one of three greys in `SHADES` (*deep*,
   *soft*, *light*). Library Tree and Biography take their colours from the layout file, so mirror any
   palette change in `PALETTE` in `tools/build_plinth.py`.
+- Favorites playlist name: `FAVORITES` in `scripts/plinth.js`.
 - For live editing, build with `--dev`. The layout then loads the scripts straight from your checkout
   instead of embedding them, so edits apply after ☰ › *Reload theme* (centre and drawer frames) or a
   foobar2000 restart (playlist drawer). A `--dev` layout only works while the checkout stays where it

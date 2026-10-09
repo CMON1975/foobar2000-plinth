@@ -23,9 +23,10 @@ const RIGHT_VIEWS = ['playlist', 'lyrics', 'about'];
 const MINI = { w: 459, h: 139, padX: 18 };
 
 // Type and glyph sizes per mode. title lists the sizes tried, largest first, until the title fits.
+// fav: the favorites star, centred in a favBox-wide button that starts where the title ends.
 const SIZES = {
-	full: { title: [36, 31, 27], empty: 30, artist: 20, album: 16, time: 14, align: DT.CENTER, side: 19, skip: 22, play: 30, knob: 10, noArt: 40 },
-	mini: { title: [15], empty: 15, artist: 12, album: 11, time: 11, align: DT.LEFT, side: 14, skip: 15, play: 18, knob: 8, noArt: 32 },
+	full: { title: [36, 31, 27], empty: 30, artist: 20, album: 16, time: 14, align: DT.CENTER, side: 19, skip: 22, play: 30, knob: 10, noArt: 40, fav: 22, favBox: 44 },
+	mini: { title: [15], empty: 15, artist: 12, album: 11, time: 11, align: DT.LEFT, side: 14, skip: 15, play: 18, knob: 8, noArt: 32, fav: 14, favBox: 28 },
 };
 
 const state = {
@@ -50,7 +51,7 @@ const TF = {
 	album: fb.TitleFormat('[%album%]$if($and(%album%,%date%), \u00b7 ,)[$left(%date%,4)]'),
 	artKey: fb.TitleFormat('$directory_path(%path%)|%album%'),
 };
-const info = { handle: null, title: '', artist: '', album: '', playing: false };
+const info = { handle: null, title: '', artist: '', album: '', playing: false, favorite: false };
 
 function refreshInfo(reloadArt) {
 	const playing = fb.IsPlaying;
@@ -68,6 +69,7 @@ function refreshInfo(reloadArt) {
 	} else {
 		info.title = info.artist = info.album = '';
 	}
+	info.favorite = isFavorite(handle);
 	loadArt(handle, reloadArt);
 	if (state.mini) layout(); // the time slots are sized from the track length
 	window.Repaint();
@@ -141,6 +143,47 @@ function artShadow(w, h) {
 		art.shadowFor = tag;
 	}
 	return art.shadow;
+}
+
+// ---- favorites ---------------------------------------------------------------------------
+// The star after the title adds the track to this playlist, creating it on first use, or takes the
+// track back out. Renaming the playlist detaches it: the next add starts a new one under this name.
+const FAVORITES = 'Favorites';
+
+function isFavorite(handle) {
+	const p = plman.FindPlaylist(FAVORITES);
+	return !!handle && p >= 0 && plman.GetPlaylistItems(p).Find(handle) >= 0;
+}
+
+function updateFavorite() {
+	const favorite = isFavorite(info.handle);
+	if (favorite === info.favorite) return;
+	info.favorite = favorite;
+	window.Repaint();
+}
+
+function toggleFavorite() {
+	const handle = info.handle;
+	if (!handle) return;
+	let p = plman.FindPlaylist(FAVORITES);
+	if (p < 0) p = plman.CreatePlaylist(plman.PlaylistCount, FAVORITES);
+	const items = plman.GetPlaylistItems(p);
+	plman.UndoBackup(p);
+	if (items.Find(handle) < 0) {
+		plman.InsertPlaylistItems(p, items.Count, new FbMetadbHandleList(handle));
+	} else {
+		// Remove every copy through the selection, then reselect whatever else was selected.
+		const drop = [], keep = [];
+		for (let i = 0; i < items.Count; i++) {
+			if (items[i].Compare(handle)) drop.push(i);
+			else if (plman.IsPlaylistItemSelected(p, i)) keep.push(i - drop.length);
+		}
+		plman.ClearPlaylistSelection(p);
+		plman.SetPlaylistSelection(p, drop, true);
+		plman.RemovePlaylistSelection(p);
+		if (keep.length) plman.SetPlaylistSelection(p, keep, true);
+	}
+	updateFavorite();
 }
 
 // ---- layout ------------------------------------------------------------------------------
@@ -353,16 +396,25 @@ function paintArt(gr) {
 
 function paintInfo(gr) {
 	const S = sizes();
+	L.fav = null;
 	if (!info.handle) {
 		text(gr, 'Nothing playing', font('light', S.empty), C.t3, L.title.x, L.title.y, L.title.w, L.title.h, S.align);
 		return;
 	}
-	let titleFont;
+	// The favorites button follows the title's text, so the title gives up the button's width:
+	// on both sides when centred, keeping it centred above the artist and album.
+	const box = px(S.favBox), centred = S.align === DT.CENTER;
+	const tx = L.title.x + (centred ? box : 0), tw = Math.max(0, L.title.w - box * (centred ? 2 : 1));
+	let titleFont, titleW;
 	for (const size of S.title) {
 		titleFont = font('light', size);
-		if (gr.CalcTextWidth(info.title, titleFont) <= L.title.w) break;
+		titleW = gr.CalcTextWidth(info.title, titleFont);
+		if (titleW <= tw) break;
 	}
-	text(gr, info.title, titleFont, C.t1, L.title.x, L.title.y, L.title.w, L.title.h, S.align);
+	titleW = Math.min(Math.ceil(titleW), tw);
+	text(gr, info.title, titleFont, C.t1, tx, L.title.y, tw, L.title.h, S.align);
+	L.fav = { x: tx + (centred ? Math.round((tw + titleW) / 2) : titleW), y: L.title.y, w: box, h: L.title.h };
+	button(gr, 'fav', info.favorite ? 'starMinus' : 'starPlus', S.fav, info.favorite ? C.t1 : C.t3);
 	text(gr, info.artist, font('regular', S.artist), C.t2, L.artist.x, L.artist.y, L.artist.w, L.artist.h, S.align);
 	text(gr, info.album, font('regular', S.album), C.t3, L.album.x, L.album.y, L.album.w, L.album.h, S.align);
 }
@@ -582,7 +634,7 @@ function toggleMini() {
 }
 
 // ---- interaction -------------------------------------------------------------------------
-const CLICKABLE = ['menu', 'libToggle', 'libClose', 'viewClose', 'shuffle', 'repeat', 'mini', 'prev', 'play', 'next', 'volIcon', 'volBar', 'seek'];
+const CLICKABLE = ['menu', 'libToggle', 'libClose', 'viewClose', 'fav', 'shuffle', 'repeat', 'mini', 'prev', 'play', 'next', 'volIcon', 'volBar', 'seek'];
 
 function hitTest(x, y) {
 	for (const id of CLICKABLE) {
@@ -609,7 +661,8 @@ function activate(id, x, y) {
 	else if (id.startsWith('tab:')) {
 		const view = id.slice(4);
 		setView(state.view === view ? '' : view);
-	} else if (id === 'shuffle') plman.PlaybackOrder = isShuffle() ? 0 : 4;
+	} else if (id === 'fav') toggleFavorite();
+	else if (id === 'shuffle') plman.PlaybackOrder = isShuffle() ? 0 : 4;
 	else if (id === 'repeat') {
 		const order = plman.PlaybackOrder;
 		plman.PlaybackOrder = order === 1 ? 2 : order === 2 ? 0 : 1;
@@ -749,6 +802,9 @@ function on_playback_order_changed() { window.Repaint(); }
 function on_volume_change() { window.Repaint(); }
 function on_item_focus_change() { if (!fb.IsPlaying) refreshInfo(); }
 function on_playlist_switch() { if (!fb.IsPlaying) refreshInfo(); }
+function on_playlists_changed() { updateFavorite(); } // the favorites playlist made, renamed or removed
+function on_playlist_items_added(p) { if (p === plman.FindPlaylist(FAVORITES)) updateFavorite(); }
+function on_playlist_items_removed(p) { if (p === plman.FindPlaylist(FAVORITES)) updateFavorite(); }
 function on_metadb_changed(handles, fromHook) { // fromHook: play-count style fields, not the file's tags
 	if (info.handle && handles.Find(info.handle) >= 0) refreshInfo(!fromHook);
 }
@@ -760,6 +816,17 @@ function debugSnapshot(name) {
 	paint(g);
 	img.ReleaseGraphics(g);
 	img.SaveAs(`${Plinth.debugDir}/plinth_${name}.png`);
+}
+
+// Snapshots the shown track toggled in or out of the favorites, then toggles it back.
+function debugFavorite(name, report) {
+	if (!info.handle) return;
+	const was = info.favorite;
+	toggleFavorite();
+	debugSnapshot(name);
+	report.push(`${name}: favorite ${was} -> ${info.favorite}, playlist ${plman.FindPlaylist(FAVORITES)}, button ${JSON.stringify(L.fav)}`);
+	toggleFavorite();
+	report.push(`${name}: favorite back to ${info.favorite}`);
 }
 
 function debugRun() {
@@ -795,6 +862,7 @@ function debugRun() {
 	layout();
 	applyPanels();
 	window.Repaint();
+	debugFavorite('favorite', report);
 
 	// Miniplayer round trip, holding the other mode for a few seconds so the native window can be inspected.
 	const win = fb.Window;
@@ -812,6 +880,7 @@ function debugRun() {
 		describe(); // after the resize frame is dropped
 		if (state.mini) report.push(`mini layout: ${JSON.stringify({ title: L.title, album: L.album, seekBar: L.seekBar, timeL: L.timeL, timeR: L.timeR, mini: L.mini, play: L.play, volBar: L.volBar })}`);
 		debugSnapshot(state.mini ? 'mini' : 'full');
+		debugFavorite(state.mini ? 'mini_favorite' : 'full_favorite', report);
 		Plinth.log('plinth_report.txt', report);
 		window.SetTimeout(() => {
 			toggleMini();
