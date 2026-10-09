@@ -96,7 +96,7 @@ To go back to your previous look, import the configuration you exported in step 
   info for the track's context menu. When stopped, it shows the focused playlist track.
 - **Favorites** (the star after the title, in the full window and the miniplayer): adds the track to
   a playlist named *Favorites*, creating it the first time. Once the track is in it, the star lights
-  up and shows a minus; click it again to take the track out. Renaming the playlist detaches it, and
+  up and fills in; click it again to take the track out. Renaming the playlist detaches it, and
   the next star click starts a new *Favorites*.
 - **Miniplayer** (the picture-in-picture button after repeat): shrinks the window to a 459×139 strip
   with the art on the left and title, artist, album, seek line and controls on the right. It has no

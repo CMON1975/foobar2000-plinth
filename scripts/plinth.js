@@ -8,7 +8,7 @@
 
 include(`${PLINTH_DIR}lib/common.js`);
 
-const { palette: C, px, font, text, drawGlyph, DT, clamp, inRect, withAlpha } = Plinth;
+const { palette: C, px, font, text, drawGlyph, fillGlyph, DT, clamp, inRect, withAlpha } = Plinth;
 
 const DRAWERS = {
 	library: { caption: 'Library', side: 'left', width: 520 },
@@ -371,9 +371,10 @@ function brighter(colour) {
 	return colour === C.t3 ? C.t2 : colour === C.t2 ? C.t1 : colour;
 }
 
-function button(gr, id, name, size, colour) {
-	const rc = L[id];
-	drawGlyph(gr, name, size, state.hover === id ? brighter(colour) : colour, rc.x, rc.y, rc.w, rc.h);
+function button(gr, id, name, size, colour, filled = false) {
+	const rc = L[id], c = state.hover === id ? brighter(colour) : colour;
+	if (filled) fillGlyph(gr, name, size, c, rc.x, rc.y, rc.w, rc.h);
+	drawGlyph(gr, name, size, c, rc.x, rc.y, rc.w, rc.h);
 }
 
 function paintDrawerFrames(gr) {
@@ -429,7 +430,7 @@ function paintInfo(gr) {
 	const tx = S.align === DT.CENTER ? L.title.x + Math.round((L.title.w - titleW - box + after) / 2) : L.title.x;
 	text(gr, title, titleFont, C.t1, tx, L.title.y, titleW, L.title.h);
 	L.fav = { x: tx + titleW, y: L.title.y, w: box, h: L.title.h };
-	button(gr, 'fav', info.favorite ? 'starMinus' : 'starPlus', S.fav, info.favorite ? C.t1 : C.t3);
+	button(gr, 'fav', 'star', S.fav, info.favorite ? C.t1 : C.t3, info.favorite);
 	text(gr, info.artist, font('regular', S.artist), C.t2, L.artist.x, L.artist.y, L.artist.w, L.artist.h, S.align);
 	text(gr, info.album, font('regular', S.album), C.t3, L.album.x, L.album.y, L.album.w, L.album.h, S.align);
 }

@@ -49,9 +49,20 @@ const Plinth = (() => {
 		shuffle: 0xe15e, repeat: 0xe146, repeatOne: 0xe1fd,
 		volume: 0xe1a9, volumeLow: 0xe1aa, volumeHigh: 0xe1ab, volumeMute: 0xe1ac,
 		playing: 0xe55a, chevronDown: 0xe06d, chevronRight: 0xe06f, close: 0xe1b2,
-		search: 0xe151, music: 0xe122, plus: 0xe13d, pip: 0xe3af, starPlus: 0xe709, starMinus: 0xe708,
+		search: 0xe151, music: 0xe122, plus: 0xe13d, pip: 0xe3af, star: 0xe176,
 	};
 	const glyph = (name) => String.fromCharCode(icon[name]);
+
+	// Lucide's glyphs are outlines only. A fill is a polygon on the icon's 24-unit grid that runs along the
+	// middle of the glyph's stroke, so the glyph drawn over it hides its edge. star: star.svg's path, flattened.
+	const fills = {
+		star: [
+			11.53, 2.29, 11.81, 2.04, 12.19, 2.04, 12.47, 2.29, 14.79, 6.97, 15.44, 7.75, 16.38, 8.13, 21.55, 8.89, 21.88, 9.08,
+			22, 9.44, 21.84, 9.79, 18.1, 13.43, 17.57, 14.3, 17.49, 15.31, 18.38, 20.45, 18.3, 20.83, 17.99, 21.05, 17.6, 21.01,
+			12.99, 18.58, 12, 18.34, 11.01, 18.58, 6.4, 21.01, 6.01, 21.05, 5.7, 20.83, 5.63, 20.45, 6.51, 15.31, 6.43, 14.3,
+			5.9, 13.43, 2.16, 9.79, 2, 9.44, 2.12, 9.08, 2.45, 8.89, 7.62, 8.13, 8.56, 7.75, 9.22, 6.97,
+		],
+	};
 
 	// ---- text -----------------------------------------------------------------------------
 	const DT = {
@@ -63,6 +74,17 @@ const Plinth = (() => {
 	const text = (gr, str, f, colour, x, y, w, h, align = DT.LEFT) => gr.GdiDrawText(str, f, colour, x, y, w, h, LINE | align);
 	const drawGlyph = (gr, name, size, colour, x, y, w, h) =>
 		gr.GdiDrawText(glyph(name), font('icons', size), colour, x, y, w, h, DT.CENTER | DT.VCENTER | DT.SINGLELINE | DT.NOPREFIX);
+	// The inside of a glyph from fills, placed where drawGlyph puts the glyph: its cell centred as DrawText centres
+	// it. A glyph is one em wide, its em box is the 24-unit grid, and Lucide has no descent, so the cell's bottom
+	// is the baseline the box stands on. GDI+ centres pixels on whole coordinates and GDI on halves, hence -0.5.
+	const fillGlyph = (gr, name, size, colour, x, y, w, h) => {
+		const f = font('icons', size), str = glyph(name);
+		const em = gr.CalcTextWidth(str, f), cell = gr.CalcTextHeight(str, f);
+		const left = x + Math.trunc((w - em) / 2), top = y + Math.trunc((h - cell) / 2) + cell - em, k = em / 24;
+		gr.SetSmoothingMode(4);
+		gr.FillPolygon(colour, 0, fills[name].map((v, i) => (i % 2 ? top : left) + v * k - 0.5));
+		gr.SetSmoothingMode(0);
+	};
 
 	const formatTime = (s) => {
 		s = Math.max(0, Math.floor(s));
@@ -92,5 +114,5 @@ const Plinth = (() => {
 		try { utils.WriteTextFile(`${debugDir}/${name}`, [].concat(lines).join('\r\n')); } catch (e) { /* ignore */ }
 	};
 
-	return { rgb, hex, withAlpha, palette, scale, px, font, family, glyph, icon, DT, text, drawGlyph, formatTime, formatLength, IDC, VK, MK, clamp, inRect, debugDir, log };
+	return { rgb, hex, withAlpha, palette, scale, px, font, family, glyph, icon, DT, text, drawGlyph, fillGlyph, formatTime, formatLength, IDC, VK, MK, clamp, inRect, debugDir, log };
 })();
