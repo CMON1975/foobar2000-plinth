@@ -94,7 +94,7 @@ To go back to your previous look, import the configuration you exported in step 
 - Centre: click or drag the seek line; drag the volume line or scroll over it; click the speaker to
   mute. Shuffle toggles shuffle (tracks); repeat cycles playlist → track → off. Right-click the track
   info for the track's context menu. When stopped, it shows the focused playlist track.
-- **Favorites** (the star after the title, in the full window and the miniplayer): adds the track to
+- **Favorites** (the star after the title, in the full window, the miniplayer and the bar): adds the track to
   a playlist named *Favorites*, creating it the first time. Once the track is in it, the star lights
   up and fills in; click it again to take the track out. Renaming the playlist detaches it, and
   the next star click starts a new *Favorites*.
@@ -108,9 +108,11 @@ To go back to your previous look, import the configuration you exported in step 
   keeping its left edge; drag it by the title or the gaps between the buttons. Pressed in the bar, the
   button brings back the full window where it was, with your previous always-on-top setting. The strip
   and the bar each remember where you leave them (the bar starts where the strip was), and foobar2000
-  reopens in whichever mode it closed in. From a maximized window
-  it un-maximizes first and maximizes again on the way back (JSplitter 4.3+; with older versions,
-  un-maximize the window yourself before switching).
+  reopens in whichever mode it closed in. From a maximized window it un-maximizes first and maximizes
+  again on the way back (JSplitter 4.3+; with older versions, un-maximize the window yourself before
+  switching).<br>
+  <img src="screenshots/miniplayer.png" width="459" alt="The miniplayer: album art on the left; title and star, artist, album, seek line and controls on the right"><br>
+  <img src="screenshots/bar.png" width="431" alt="The bar: shuffle, repeat, miniplayer, back, pause, forward and volume in one row, then the title and star">
 - Playlist drawer: click the playlist name to switch, create, rename or delete playlists. Click,
   Ctrl/Shift-click and arrow keys select; click an album heading to select the album; double-click or
   Enter plays; Delete removes; Ctrl+A selects all; drag to reorder; drop files or library items in.
