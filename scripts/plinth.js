@@ -2,7 +2,7 @@
 // Plinth — root JSplitter script.
 // Draws the centre "plinth" (album art, track info, seek bar, transport) and the top chrome,
 // and shows the child panels (Library, Playlist, Lyrics, About) as drawers. The miniplayer
-// toggle turns the main window into a small frameless strip pinned on top.
+// toggle turns the main window into a small frameless strip pinned on top, then a one-row bar.
 // tools/build_plinth.py inlines lib/common.js in place of the include below; in --dev builds the
 // panel's stub script defines PLINTH_DIR and includes this file from the checkout.
 
@@ -21,6 +21,9 @@ const RIGHT_VIEWS = ['playlist', 'lyrics', 'about'];
 // Miniplayer window (design board "Mini · 120", grown to space its rows): art fills the left square,
 // and title, artist, album, seek line and controls stack on the right, 18px in from either side.
 const MINI = { w: 459, h: 139, padX: 18 };
+// Bar, the miniplayer button's next step down: the mini's controls in one row, then the title and
+// favorites star, padX in from either end.
+const BAR = { w: 560, h: 32, padX: 12 };
 
 // Type and glyph sizes per mode. title lists the sizes tried, largest first, until the title fits.
 // fav: the favorites star, centred in a favBox-wide button that starts where the title ends.
@@ -32,7 +35,8 @@ const SIZES = {
 const state = {
 	view: window.GetProperty('Plinth.View', ''),
 	library: window.GetProperty('Plinth.Library', false),
-	mini: window.GetProperty('Plinth.Mini', false),
+	mini: window.GetProperty('Plinth.Mini', false), // either strip: the mini or the bar
+	bar: window.GetProperty('Plinth.Bar', false),
 	w: 0,
 	h: 0,
 	hover: null,
@@ -41,6 +45,7 @@ const state = {
 	volDrag: false,
 };
 if (!RIGHT_VIEWS.includes(state.view)) state.view = '';
+if (!state.mini) state.bar = false;
 
 let L = {}; // layout rects, rebuilt on resize / drawer change
 
@@ -71,7 +76,10 @@ function refreshInfo(reloadArt) {
 	}
 	info.favorite = isFavorite(handle);
 	loadArt(handle, reloadArt);
-	if (state.mini) layout(); // the time slots are sized from the track length
+	// The bar's width follows the title; not before the panel's first on_size, as the restart fit does it then.
+	if (state.bar) {
+		if (state.w > 0 && barWidth() !== window.Width) fitMiniWindow(fb.Window.X, fb.Window.Y);
+	} else if (state.mini) layout(); // the time slots are sized from the track length
 	window.Repaint();
 }
 
@@ -194,7 +202,8 @@ function drawerWidth(name) {
 
 function layout() {
 	if (state.mini) {
-		layoutMini();
+		if (state.bar) L = barLayout(state.w, state.h);
+		else layoutMini();
 		return;
 	}
 	const { w, h } = state;
@@ -321,6 +330,45 @@ function layoutMini() {
 	L.volIcon = b(L.volBar.x - px(5) - px(S.side) - nudge, btn);
 }
 
+// One row at the mini's sizes: shuffle, repeat, miniplayer | prev, play, next | volume | title and star.
+// The title takes what's left; the window drags by it and by the gaps. Returns the rects for a w x h bar.
+function barLayout(w, h) {
+	const S = SIZES.mini;
+	const r = (x, y, ww, hh) => ({ x, y, w: ww, h: hh });
+	const btn = px(28), big = px(30), gap = px(2), group = px(10);
+	const nudge = Math.round((btn - px(S.side)) / 2); // the first glyph starts padX in
+	const b = (x, size) => r(x, Math.round((h - size) / 2), size, size);
+	const R = { tabs: [] };
+	R.info = r(0, 0, w, h);
+	let x = px(BAR.padX) - nudge;
+	R.shuffle = b(x, btn);
+	R.repeat = b(x + btn, btn);
+	R.mini = b(x + btn * 2, btn);
+	x += btn * 3 + group;
+	R.prev = b(x, btn);
+	R.play = b(x + btn + gap, big);
+	R.next = b(x + btn + gap + big + gap, btn);
+	x += btn * 2 + big + gap * 2 + group;
+	R.volIcon = b(x, btn);
+	R.volBar = r(x + btn, Math.round(h / 2) - px(8), px(44), px(16));
+	const titleX = R.volBar.x + R.volBar.w + px(16);
+	// The star's button reaches past its ink into padX, so the ink, like the shuffle glyph's, sits padX in.
+	R.title = r(titleX, 0, Math.max(0, w - px(BAR.padX) + favPad(S) - titleX), h);
+	return R;
+}
+
+// The space between the favorites star's ink and either side of its button.
+const favPad = (S) => Math.round((px(S.favBox) - px(S.fav)) / 2);
+
+// The bar is as wide as its title needs, up to BAR.w: it ends padX past the star, or past "Nothing playing".
+function barWidth() {
+	const S = SIZES.mini, titleX = barLayout(0, px(BAR.h)).title.x;
+	const end = info.handle
+		? titleX + textWidth(info.title, font('light', S.title[0])) + px(S.favBox) - favPad(S)
+		: titleX + textWidth('Nothing playing', font('light', S.empty));
+	return Math.min(px(BAR.w), end + px(BAR.padX));
+}
+
 // ---- child panels ------------------------------------------------------------------------
 const panelCache = {};
 function panel(name) {
@@ -426,11 +474,12 @@ function paintInfo(gr) {
 	}
 	const title = ellipsize(gr, info.title, titleFont, tw);
 	const titleW = Math.ceil(gr.CalcTextWidth(title, titleFont));
-	const after = Math.round((box - px(S.fav)) / 2);
+	const after = favPad(S);
 	const tx = S.align === DT.CENTER ? L.title.x + Math.round((L.title.w - titleW - box + after) / 2) : L.title.x;
 	text(gr, title, titleFont, C.t1, tx, L.title.y, titleW, L.title.h);
 	L.fav = { x: tx + titleW, y: L.title.y, w: box, h: L.title.h };
 	button(gr, 'fav', 'star', S.fav, info.favorite ? C.t1 : C.t3, info.favorite);
+	if (state.bar) return;
 	text(gr, info.artist, font('regular', S.artist), C.t2, L.artist.x, L.artist.y, L.artist.w, L.artist.h, S.align);
 	text(gr, info.album, font('regular', S.album), C.t3, L.album.x, L.album.y, L.album.w, L.album.h, S.align);
 }
@@ -503,9 +552,9 @@ function paintChrome(gr) {
 function paint(gr) {
 	gr.FillSolidRect(0, 0, state.w, state.h, C.g1);
 	if (!state.mini) paintDrawerFrames(gr);
-	paintArt(gr);
+	if (!state.bar) paintArt(gr);
 	paintInfo(gr);
-	paintSeek(gr);
+	if (!state.bar) paintSeek(gr);
 	paintControls(gr);
 	if (!state.mini) paintChrome(gr);
 }
@@ -551,24 +600,28 @@ function lockWindowSize(w, h) { // no arguments unlocks
 	win.MaxSize = !!w;
 }
 
-// Size the window so this panel gets exactly MINI. The frame, and any menu bar, toolbars or status bar
+// Size the window so this panel gets exactly MINI, or the bar. The frame, and any menu bar, toolbars or status bar
 // Columns UI shows, sit outside the panel, and toolbars wrap at this width, so measure after a first move.
+// Bars taller than the window squeeze the panel to nothing, which hides part of them from that measurement,
+// so measure again until the panel fits.
 function fitMiniWindow(x, y) {
-	const win = fb.Window;
+	const win = fb.Window, sw = state.bar ? barWidth() : px(MINI.w), sh = px(state.bar ? BAR.h : MINI.h);
 	lockWindowSize();
-	win.Move(x, y, px(MINI.w), px(MINI.h));
-	const w = px(MINI.w) + win.Width - window.Width, h = px(MINI.h) + win.Height - window.Height;
-	if (w !== win.Width || h !== win.Height) win.Move(x, y, w, h);
-	lockWindowSize(w, h);
+	win.Move(x, y, sw, sh);
+	for (let i = 0; i < 3 && (window.Width !== sw || window.Height !== sh); i++) {
+		win.Move(x, y, sw + win.Width - window.Width, sh + win.Height - window.Height);
+	}
+	lockWindowSize(win.Width, win.Height);
 }
 
 let frameWait = null; // interval while the resize frame is being dropped
 
 // Runs dropFrameScript with the size unlocked so it can resize the window, then locks it again once the
-// window has changed width (utils.Run reports no completion; RunCmdAsync's processes can't reach the window).
+// panel spans the window (utils.Run reports no completion; RunCmdAsync's processes can't reach the window).
+// Not once the width changes: the bar, opened meanwhile, changes it too and locks a size the script can't shrink.
 // The framed window first moves out by the frame, so the strip ends up where it was fitted.
 function dropResizeFrame() {
-	const win = fb.Window, width = win.Width, start = Date.now();
+	const win = fb.Window, start = Date.now();
 	const f = Math.round((win.Width - window.Width) / 2); // the frame's thickness: the panel spans the window
 	if (f <= 0) return;
 	let started = false;
@@ -583,7 +636,7 @@ function dropResizeFrame() {
 	}
 	win.Move(win.X - f, win.Y - f, win.Width, win.Height);
 	frameWait = window.SetInterval(() => {
-		const dropped = win.Width !== width;
+		const dropped = win.Width === window.Width;
 		if (state.mini && !dropped && Date.now() - start < 3000) return;
 		window.ClearInterval(frameWait);
 		frameWait = null;
@@ -591,9 +644,11 @@ function dropResizeFrame() {
 	}, 50);
 }
 
-function setMini(on) {
+function setMini(on, bar = false) {
 	state.mini = on;
+	state.bar = on && bar;
 	window.SetProperty('Plinth.Mini', on);
+	window.SetProperty('Plinth.Bar', state.bar);
 	state.hover = state.pressed = state.seek = null;
 	state.volDrag = false;
 	layout();
@@ -612,6 +667,17 @@ function enterMini() {
 	fitMiniWindow(x, y);
 	dropResizeFrame();
 	fb.AlwaysOnTop = true;
+}
+
+// From the mini, already frameless and on top: only the size changes. Each strip reopens where it was
+// last left, and the bar starts where the mini is the first time.
+function enterBar() {
+	const win = fb.Window;
+	window.SetProperty('Plinth.MiniPos', [win.X, win.Y].join(','));
+	const pos = readNumbers('Plinth.BarPos');
+	const [x, y] = pos.length === 2 ? pos : [win.X, win.Y];
+	setMini(true, true);
+	fitMiniWindow(x, y);
 }
 
 let restoreWait = null; // interval while a maximized window is being restored on the way to mini
@@ -636,8 +702,10 @@ function toggleMini() {
 			restoreWait = null;
 			enterMini(); // FullRect is now the restored rect, so maximizing again keeps it as the normal size
 		}, 15);
+	} else if (!state.bar) {
+		enterBar();
 	} else {
-		window.SetProperty('Plinth.MiniPos', [win.X, win.Y].join(','));
+		window.SetProperty('Plinth.BarPos', [win.X, win.Y].join(','));
 		const full = readNumbers('Plinth.FullRect');
 		setMini(false);
 		lockWindowSize();
@@ -810,9 +878,12 @@ function on_playback_new_track() { refreshInfo(true); }
 function on_playback_dynamic_info_track() { refreshInfo(); }
 function on_playback_stop(reason) { if (reason !== 2) refreshInfo(); }
 function on_playback_pause() { window.Repaint(); }
-function on_playback_seek() { window.RepaintRect(L.seekArea.x, L.seekArea.y, L.seekArea.w, L.seekArea.h); }
+function repaintSeek() { // the bar has no seek line
+	if (L.seekArea) window.RepaintRect(L.seekArea.x, L.seekArea.y, L.seekArea.w, L.seekArea.h);
+}
+function on_playback_seek() { repaintSeek(); }
 function on_playback_time() {
-	if (state.seek === null) window.RepaintRect(L.seekArea.x, L.seekArea.y, L.seekArea.w, L.seekArea.h);
+	if (state.seek === null) repaintSeek();
 }
 function on_playback_order_changed() { window.Repaint(); }
 function on_volume_change() { window.Repaint(); }
@@ -880,30 +951,34 @@ function debugRun() {
 	window.Repaint();
 	debugFavorite('favorite', report);
 
-	// Miniplayer round trip, holding the other mode for a few seconds so the native window can be inspected.
+	// Miniplayer round trip through the mini and the bar, holding the bar for a few seconds so the native
+	// window can be inspected.
 	const win = fb.Window;
-	const describe = () => report.push(`${state.mini ? 'mini' : 'full'}: window ${win.X},${win.Y} ${win.Width}x${win.Height} panel ${window.Width}x${window.Height} frame ${win.FrameStyle} onTop ${fb.AlwaysOnTop}`);
-	describe();
-	try {
-		toggleMini();
-	} catch (e) {
-		report.push(`toggle: ERROR ${e.message}`);
-		Plinth.log('plinth_report.txt', report);
-		return;
-	}
-	describe();
-	window.SetTimeout(() => {
-		describe(); // after the resize frame is dropped
-		if (state.mini) report.push(`mini layout: ${JSON.stringify({ title: L.title, album: L.album, seekBar: L.seekBar, timeL: L.timeL, timeR: L.timeR, mini: L.mini, play: L.play, volBar: L.volBar })}`);
-		debugSnapshot(state.mini ? 'mini' : 'full');
-		debugFavorite(state.mini ? 'mini_favorite' : 'full_favorite', report);
-		Plinth.log('plinth_report.txt', report);
-		window.SetTimeout(() => {
+	const mode = () => (state.bar ? 'bar' : state.mini ? 'mini' : 'full');
+	const describe = () => report.push(`${mode()}: window ${win.X},${win.Y} ${win.Width}x${win.Height} panel ${window.Width}x${window.Height} frame ${win.FrameStyle} onTop ${fb.AlwaysOnTop}`);
+	// Presses the miniplayer button, and a second later (the resize frame dropped) reports and snapshots the strip.
+	const press = (then) => {
+		try {
 			toggleMini();
-			describe();
+		} catch (e) {
+			report.push(`toggle: ERROR ${e.message}`);
 			Plinth.log('plinth_report.txt', report);
-		}, 8000);
-	}, 1000);
+			return;
+		}
+		describe();
+		window.SetTimeout(() => {
+			describe();
+			if (state.mini) {
+				report.push(`${mode()} layout: ${JSON.stringify({ title: L.title, album: L.album, seekBar: L.seekBar, timeL: L.timeL, timeR: L.timeR, shuffle: L.shuffle, mini: L.mini, prev: L.prev, play: L.play, next: L.next, volIcon: L.volIcon, volBar: L.volBar })}`);
+				debugSnapshot(mode());
+				debugFavorite(`${mode()}_favorite`, report);
+			}
+			Plinth.log('plinth_report.txt', report);
+			then();
+		}, 1000);
+	};
+	describe();
+	press(() => press(() => window.SetTimeout(() => press(() => {}), 8000)));
 }
 
 if (Plinth.debugDir) fb.Volume = -100; // test harness: never make sound

@@ -102,9 +102,13 @@ To go back to your previous look, import the configuration you exported in step 
   with the art on the left and title, artist, album, seek line and controls on the right. It has no
   title bar or border and stays on top of other windows; drag it by the art or text. (A hidden Windows
   PowerShell call removes the resizable border a moment after the strip appears; where PowerShell
-  can't run, the border and its resize cursors stay.) The same button, lit, brings
-  back the full window where it was, with your previous always-on-top setting. The strip remembers
-  where you leave it, and foobar2000 reopens in whichever mode it closed in. From a maximized window
+  can't run, the border and its resize cursors stay.) The same button, lit, turns the strip into a
+  32 px high **bar**: the controls in one row, then the title and the favorites star (no art, artist,
+  album or seek line). The bar is as wide as the title needs, up to 560 px, and refits on each track,
+  keeping its left edge; drag it by the title or the gaps between the buttons. Pressed in the bar, the
+  button brings back the full window where it was, with your previous always-on-top setting. The strip
+  and the bar each remember where you leave them (the bar starts where the strip was), and foobar2000
+  reopens in whichever mode it closed in. From a maximized window
   it un-maximizes first and maximizes again on the way back (JSplitter 4.3+; with older versions,
   un-maximize the window yourself before switching).
 - Playlist drawer: click the playlist name to switch, create, rename or delete playlists. Click,
@@ -148,6 +152,7 @@ Then import `Plinth.fcl` again.
   *soft*, *light*). Library Tree and Biography take their colours from the layout file, so mirror any
   palette change in `PALETTE` in `tools/build_plinth.py`.
 - Favorites playlist name: `FAVORITES` in `scripts/plinth.js`.
+- Miniplayer and bar sizes: `MINI` and `BAR` in `scripts/plinth.js` (`BAR.w` is the bar's widest).
 - For live editing, build with `--dev`. The layout then loads the scripts straight from your checkout
   instead of embedding them, so edits apply after ☰ › *Reload theme* (centre and drawer frames) or a
   foobar2000 restart (playlist drawer). A `--dev` layout only works while the checkout stays where it
@@ -159,6 +164,9 @@ Then import `Plinth.fcl` again.
   and moves and shows its child panels (`Library`, `Playlist`, `Lyrics`, `About`) as drawers.
 - `scripts/playlist.js`: the playlist drawer (Spider Monkey Panel).
 - `scripts/lib/common.js`: palette, fonts, Lucide codepoints, drawing helpers.
+- `tests/`: Node tests for `scripts/plinth.js` (window modes, the bar's layout). `tests/foobar.mjs`
+  loads the real script with stand-ins for foobar2000's globals. Run `node --test "tests/*.test.mjs"`
+  (Node 22+).
 - `tools/make_icons.py`: renders `icons/*.ico` from `fonts/lucide.ttf` (needs Pillow).
 - `tools/build_plinth.py` and `tools/fcl.py`: write `Plinth.fcl` directly: the layout, the child panels
   with their scripts or packages and Library Tree / Biography settings, colours, and misc layout.
