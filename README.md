@@ -94,7 +94,7 @@ To go back to your previous look, import the configuration you exported in step 
 - Centre: click or drag the seek line; drag the volume line or scroll over it; click the speaker to
   mute. Shuffle toggles shuffle (tracks); repeat cycles playlist → track → off. Right-click the track
   info for the track's context menu. When stopped, it shows the focused playlist track.
-- **Favorites** (the star after the title, in the full window and the miniplayer): adds the track to
+- **Favorites** (the star after the title, in the full window, the miniplayer and the bar): adds the track to
   a playlist named *Favorites*, creating it the first time. Once the track is in it, the star lights
   up and fills in; click it again to take the track out. Renaming the playlist detaches it, and
   the next star click starts a new *Favorites*.
@@ -102,11 +102,17 @@ To go back to your previous look, import the configuration you exported in step 
   with the art on the left and title, artist, album, seek line and controls on the right. It has no
   title bar or border and stays on top of other windows; drag it by the art or text. (A hidden Windows
   PowerShell call removes the resizable border a moment after the strip appears; where PowerShell
-  can't run, the border and its resize cursors stay.) The same button, lit, brings
-  back the full window where it was, with your previous always-on-top setting. The strip remembers
-  where you leave it, and foobar2000 reopens in whichever mode it closed in. From a maximized window
-  it un-maximizes first and maximizes again on the way back (JSplitter 4.3+; with older versions,
-  un-maximize the window yourself before switching).
+  can't run, the border and its resize cursors stay.) The same button, lit, turns the strip into a
+  32 px high **bar**: the controls in one row, then the title and the favorites star (no art, artist,
+  album or seek line). The bar is as wide as the title needs, up to 560 px, and refits on each track,
+  keeping its left edge; drag it by the title or the gaps between the buttons. Pressed in the bar, the
+  button brings back the full window where it was, with your previous always-on-top setting. The strip
+  and the bar each remember where you leave them (the bar starts where the strip was), and foobar2000
+  reopens in whichever mode it closed in. From a maximized window it un-maximizes first and maximizes
+  again on the way back (JSplitter 4.3+; with older versions, un-maximize the window yourself before
+  switching).<br>
+  <img src="screenshots/miniplayer.png" width="459" alt="The miniplayer: album art on the left; title and star, artist, album, seek line and controls on the right"><br>
+  <img src="screenshots/bar.png" width="431" alt="The bar: shuffle, repeat, miniplayer, back, pause, forward and volume in one row, then the title and star">
 - Playlist drawer: click the playlist name to switch, create, rename or delete playlists. Click,
   Ctrl/Shift-click and arrow keys select; click an album heading to select the album; double-click or
   Enter plays; Delete removes; Ctrl+A selects all; drag to reorder; drop files or library items in.
@@ -148,6 +154,7 @@ Then import `Plinth.fcl` again.
   *soft*, *light*). Library Tree and Biography take their colours from the layout file, so mirror any
   palette change in `PALETTE` in `tools/build_plinth.py`.
 - Favorites playlist name: `FAVORITES` in `scripts/plinth.js`.
+- Miniplayer and bar sizes: `MINI` and `BAR` in `scripts/plinth.js` (`BAR.w` is the bar's widest).
 - For live editing, build with `--dev`. The layout then loads the scripts straight from your checkout
   instead of embedding them, so edits apply after ☰ › *Reload theme* (centre and drawer frames) or a
   foobar2000 restart (playlist drawer). A `--dev` layout only works while the checkout stays where it
@@ -159,6 +166,9 @@ Then import `Plinth.fcl` again.
   and moves and shows its child panels (`Library`, `Playlist`, `Lyrics`, `About`) as drawers.
 - `scripts/playlist.js`: the playlist drawer (Spider Monkey Panel).
 - `scripts/lib/common.js`: palette, fonts, Lucide codepoints, drawing helpers.
+- `tests/`: Node tests for `scripts/plinth.js` (window modes, the bar's layout). `tests/foobar.mjs`
+  loads the real script with stand-ins for foobar2000's globals. Run `node --test "tests/*.test.mjs"`
+  (Node 22+).
 - `tools/make_icons.py`: renders `icons/*.ico` from `fonts/lucide.ttf` (needs Pillow).
 - `tools/build_plinth.py` and `tools/fcl.py`: write `Plinth.fcl` directly: the layout, the child panels
   with their scripts or packages and Library Tree / Biography settings, colours, and misc layout.
