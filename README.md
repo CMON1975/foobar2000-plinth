@@ -168,8 +168,12 @@ Then import `Plinth.fcl` again.
 - `scripts/lib/common.js`: palette, fonts, Lucide codepoints, drawing helpers.
 - `tests/`: Node tests for `scripts/plinth.js` (window modes, the bar's layout). `tests/foobar.mjs`
   loads the real script with stand-ins for foobar2000's globals. Run `node --test "tests/*.test.mjs"`
-  (Node 22+).
+  (Node 22+). `tests/test_render_board.py` covers `tools/render_board.py`:
+  `python -m unittest discover -s tests`.
 - `tools/make_icons.py`: renders `icons/*.ico` from `fonts/lucide.ttf` (needs Pillow).
+- `tools/render_board.py`: renders a static board from the design mock-up (the miniplayer and bar
+  shots come from two) to a PNG through headless Edge, e.g.
+  `python tools/render_board.py Bar32.dc.html screenshots/bar.png` (needs Pillow and Edge).
 - `tools/build_plinth.py` and `tools/fcl.py`: write `Plinth.fcl` directly: the layout, the child panels
   with their scripts or packages and Library Tree / Biography settings, colours, and misc layout.
   `docs/fcl-format.md` documents the file format, including JSplitter's undocumented child table.
